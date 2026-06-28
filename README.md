@@ -89,6 +89,13 @@ run_logger.py    Einstiegspunkt headless
 config.example.yaml
 ```
 
+<img src="docs/monitor.png" width="700">
+
+<img src="docs/diagram.png" width="700">
+
+<img src="docs/mqtt_in_iobroker.png" width="700">
+
+
 ## Erledigt in v0.3.0
 
 - Versionsanzeige im Dashboard (Statuszeile).
