@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VK BMS · Leitstand</title>
+<style>
+  :root{
+    --bg:#0c1416; --panel:#11201e; --panel2:#0f1b1a; --line:#223834;
+    --text:#e9f1ef; --muted:#7e9893; --dim:#56706c;
+    --charge:#46d6a0; --discharge:#f4a648; --idle:#6fa0c4;
+    --cmin:#4aa6e4; --cmax:#ec6f6f; --cmid:#2f6f66; --alarm:#ff5d5d;
+    --mono:"Consolas","SFMono-Regular",ui-monospace,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans)}
+  body{padding:0 0 48px}
+  header{position:sticky;top:0;z-index:5;background:linear-gradient(180deg,#0d1719,#0c1416);
+    border-bottom:1px solid var(--line);padding:14px 22px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+  .brand{font-weight:600;letter-spacing:.14em;text-transform:uppercase;font-size:14px}
+  .brand b{color:var(--charge)}
+  nav{display:flex;gap:4px;margin-left:8px}
+  nav a{font-size:12.5px;letter-spacing:.06em;padding:6px 12px;border-radius:6px;color:var(--muted);text-decoration:none}
+  nav a.active{background:var(--panel);color:var(--text)}
+  .status{margin-left:auto;display:flex;align-items:center;gap:10px;font:12.5px/1 var(--mono);color:var(--muted)}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--dim)}
+  .dot.live{background:var(--charge);box-shadow:0 0 10px 1px #46d6a060}
+  .dot.stale{background:var(--discharge)} .dot.down{background:var(--alarm)}
+  .ver{font:11px var(--mono);color:var(--dim);padding-left:10px;border-left:1px solid var(--line)}
+
+  .mos{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .mosbtn{font:11px/1 var(--mono);letter-spacing:.05em;padding:7px 11px;border-radius:7px;
+    border:1px solid var(--line);background:var(--panel2);color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:7px}
+  .mosbtn i{width:8px;height:8px;border-radius:50%;background:var(--dim)}
+  .mosbtn.on{color:var(--charge);border-color:#46d6a055} .mosbtn.on i{background:var(--charge);box-shadow:0 0 8px #46d6a0aa}
+  .mosbtn.unk{opacity:.5}
+  .pwr{font:11px/1 var(--mono);letter-spacing:.05em;padding:7px 11px;border-radius:7px;
+    border:1px solid #ff5d5d55;background:transparent;color:var(--alarm);cursor:pointer}
+  .pwr:hover{background:#ff5d5d18}
+
+  main{max-width:1180px;margin:22px auto;padding:0 18px;display:grid;gap:26px}
+  .group{display:grid;gap:14px}
+  .ghead{display:flex;align-items:center;gap:10px;font:12px var(--mono);letter-spacing:.1em;
+    text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line);padding-bottom:7px}
+  .ghead .pause{margin-left:auto;font:11px var(--mono);padding:5px 11px;border-radius:7px;
+    border:1px solid var(--line);background:var(--panel2);color:var(--muted);cursor:pointer}
+  .ghead .pause.on{color:var(--discharge);border-color:#f4a64855}
+  .empty{color:var(--muted);font:13px var(--mono);padding:60px;text-align:center;border:1px dashed var(--line);border-radius:12px}
+  .pack{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .pack.alarm{border-color:var(--alarm);box-shadow:0 0 0 1px #ff5d5d40}
+  .ptop{display:flex;align-items:center;gap:16px;padding:16px 20px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .pid{font-weight:600;letter-spacing:.1em;text-transform:uppercase;font-size:13px;color:var(--muted)}
+  .pid b{color:var(--text);font-size:16px;margin-left:6px}
+  .badge{font:11px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;padding:5px 10px;border-radius:20px;border:1px solid currentColor}
+  .badge.mode{min-width:92px;text-align:center}
+  .badge.charge{color:var(--charge)} .badge.discharge{color:var(--discharge)} .badge.idle{color:var(--idle)}
+  .badge.warn{color:var(--alarm);border-color:var(--alarm)} .badge.hidden{display:none}
+  .soc{margin-left:auto;text-align:right}
+  .soc .v{font:600 30px/1 var(--mono)} .soc .l{font:11px var(--mono);color:var(--muted);letter-spacing:.1em}
+  .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:1px;background:var(--line)}
+  .m{background:var(--panel2);padding:13px 16px}
+  .m .l{font:10.5px var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+  .m .v{font:600 20px/1.1 var(--mono);margin-top:5px}
+  .m .v small{font-size:12px;color:var(--muted);font-weight:400;margin-left:3px}
+  .v.charge{color:var(--charge)} .v.discharge{color:var(--discharge)}
+  .cells{padding:18px 20px}
+  .cells-head{display:flex;align-items:baseline;gap:14px;margin-bottom:14px}
+  .cells-head .t{font:11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+  .cells-head .spread{font:12px var(--mono);color:var(--muted)} .cells-head .spread b{color:var(--text)}
+  .strip{display:grid;grid-template-columns:repeat(16,1fr);gap:6px;align-items:end;height:130px}
+  @media(max-width:620px){.strip{grid-template-columns:repeat(8,1fr);height:auto;grid-auto-rows:64px}}
+  .cell{position:relative;height:100%;display:flex;flex-direction:column;justify-content:flex-end;
+    background:#0a1211;border:1px solid var(--line);border-radius:5px;overflow:hidden}
+  .cell .bar{background:var(--cmid);width:100%;transition:height .4s ease}
+  .cell.min .bar{background:var(--cmin)} .cell.max .bar{background:var(--cmax)}
+  .cell .mv{position:absolute;top:5px;left:0;right:0;text-align:center;font:10px var(--mono);color:var(--text)}
+  .cell .ix{position:absolute;bottom:3px;left:0;right:0;text-align:center;font:600 10px var(--mono);
+    color:#dfeae8;text-shadow:0 1px 2px #000a,0 0 2px #000}
+  .cell.bal{box-shadow:0 0 0 1.5px var(--charge) inset,0 0 8px #46d6a055}
+  .cell.bal::after{content:"≈";position:absolute;top:3px;right:4px;font:9px var(--mono);color:var(--charge)}
+  .cell.warn .bar{background:var(--discharge)!important}
+  .cell.crit{box-shadow:0 0 0 1.5px var(--alarm) inset}
+  .cell.crit .bar{background:var(--alarm)!important} .cell.crit .mv{color:var(--alarm)}
+  .pwarn{display:flex;gap:6px;flex-wrap:wrap}
+  .pwarn .b{font:10px var(--mono);letter-spacing:.05em;padding:4px 9px;border-radius:20px;border:1px solid currentColor}
+  .pwarn .b.w{color:var(--discharge)} .pwarn .b.p{color:var(--alarm)}
+  .temps{display:flex;flex-wrap:wrap;gap:1px;background:var(--line);border-top:1px solid var(--line)}
+  .temps .tt{background:var(--panel2);padding:11px 16px;flex:1;min-width:90px}
+  .temps .tt .l{font:10px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .temps .tt .v{font:600 17px/1 var(--mono);margin-top:4px}
+
+  /* Modal + Toast */
+  .overlay{position:fixed;inset:0;background:#04090acc;display:none;align-items:center;justify-content:center;z-index:20}
+  .overlay.show{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px 24px;max-width:420px;width:90%}
+  .modal h3{margin:0 0 10px;font:600 15px var(--sans);color:var(--text)}
+  .modal p{margin:0 0 20px;font:13px/1.5 var(--mono);color:var(--muted)}
+  .modal .row{display:flex;gap:10px;justify-content:flex-end}
+  .modal button{font:12.5px var(--mono);padding:9px 16px;border-radius:8px;cursor:pointer;border:1px solid var(--line)}
+  .modal .ok{background:var(--charge);color:#06231a;border:none;font-weight:700}
+  .modal .ok.danger{background:var(--alarm);color:#2a0606}
+  .modal .cancel{background:transparent;color:var(--muted)}
+  #toasts{position:fixed;right:18px;bottom:18px;display:flex;flex-direction:column;gap:8px;z-index:30}
+  .toast{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--charge);
+    border-radius:8px;padding:11px 15px;font:12.5px var(--mono);color:var(--text);box-shadow:0 6px 20px #0008;animation:tin .2s ease}
+  .toast.err{border-left-color:var(--alarm)} .toast.warn{border-left-color:var(--discharge)}
+  @keyframes tin{from{opacity:0;transform:translateY(8px)}to{opacity:1}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">VK&nbsp;<b>BMS</b>&nbsp;Leitstand</div>
+  <nav>
+    <a class="active" href="/">Monitor</a>
+    <a href="/chart">Verlauf</a>
+    <a href="/settings">Einstellungen</a>
+  </nav>
+  <div class="status"><span id="dot" class="dot"></span><span id="stext">verbinde…</span><span class="ver">{{VERSION}}</span></div>
+</header>
+
+<main id="main"><div class="empty" id="empty">Warte auf erste Messwerte…</div></main>
+
+<div class="overlay" id="overlay"><div class="modal">
+  <h3 id="mTitle"></h3><p id="mText"></p>
+  <div class="row"><button class="cancel" id="mCancel">Abbrechen</button><button class="ok" id="mOk">Bestätigen</button></div>
+</div></div>
+<div id="toasts"></div>
+
+<script>
+const fmt=(n,d=2)=>(n==null||isNaN(n))?"–":Number(n).toFixed(d);
+const NAMES=["cell_t1","cell_t2","cell_t3","cell_t4","env_t","mos_t"];
+const TLABEL={cell_t1:"Zelle 1",cell_t2:"Zelle 2",cell_t3:"Zelle 3",cell_t4:"Zelle 4",env_t:"Umgebung",mos_t:"MOSFET"};
+const mode=c=> c>0.3?["charge","Laden"] : c<-0.3?["discharge","Entladen"] : ["idle","Ruhe"];
+
+// ---- Modal / Toast ----
+function confirmDialog(title,text,danger){
+  return new Promise(res=>{
+    const ov=document.getElementById("overlay");
+    document.getElementById("mTitle").textContent=title;
+    document.getElementById("mText").textContent=text;
+    const ok=document.getElementById("mOk"), cancel=document.getElementById("mCancel");
+    ok.className="ok"+(danger?" danger":"");
+    const done=v=>{ ov.classList.remove("show"); ok.onclick=cancel.onclick=null; res(v); };
+    ok.onclick=()=>done(true); cancel.onclick=()=>done(false);
+    ov.classList.add("show");
+  });
+}
+function toast(msg,kind){
+  const t=document.createElement("div"); t.className="toast"+(kind?(" "+kind):""); t.textContent=msg;
+  document.getElementById("toasts").appendChild(t);
+  setTimeout(()=>{ t.style.opacity="0"; setTimeout(()=>t.remove(),300); }, 3200);
+}
+
+// ---- Card skeleton (built once) ----
+function buildCard(p){
+  const card=document.createElement("section"); card.className="pack"; card.dataset.pack=p.source;
+  let strip=""; for(let i=1;i<=16;i++) strip+=`<div class="cell" data-cell="${i}"><div class="mv"></div><div class="bar"></div><div class="ix">${i}</div></div>`;
+  let temps=""; NAMES.forEach(k=>{ temps+=`<div class="tt" data-temp="${k}" style="display:none"><div class="l">${TLABEL[k]}</div><div class="v"></div></div>`; });
+  card.innerHTML=`
+    <div class="ptop">
+      <div class="pid"><b>${p.source||('Pack '+p.pack)}</b></div>
+      <span class="badge mode"></span>
+      <span class="badge warn hidden" data-alarm>Alarm</span>
+      <div class="pwarn" data-pwarn></div>
+      <div class="mos">
+        <button class="mosbtn" data-cfet><span>CFET</span> <i></i></button>
+        <button class="mosbtn" data-dfet><span>DFET</span> <i></i></button>
+        <button class="pwr" data-pwr>Power Off</button>
+      </div>
+      <div class="soc"><div class="v" data-soc></div><div class="l">SOC</div></div>
+    </div>
+    <div class="metrics">
+      <div class="m"><div class="l">Spannung</div><div class="v"><span data-f="voltage_v"></span><small>V</small></div></div>
+      <div class="m"><div class="l">Strom</div><div class="v" data-current><small>A</small></div></div>
+      <div class="m"><div class="l">SOH</div><div class="v"><span data-f="soh"></span><small>%</small></div></div>
+      <div class="m"><div class="l">Restkapazität</div><div class="v"><span data-f="remain_ah"></span><small>Ah</small></div></div>
+      <div class="m"><div class="l">Vollladung</div><div class="v"><span data-f="full_ah"></span><small>Ah</small></div></div>
+      <div class="m"><div class="l">Zyklen</div><div class="v"><span data-f="cycles"></span></div></div>
+    </div>
+    <div class="cells">
+      <div class="cells-head"><span class="t">Zellspannungen</span><span class="spread" data-spread></span></div>
+      <div class="strip">${strip}</div>
+    </div>
+    <div class="temps">${temps}</div>`;
+  const pk=p.pack_key||("pack"+p.pack);
+  card.querySelector("[data-cfet]").onclick=()=>switchFet(pk,"cfet",card);
+  card.querySelector("[data-dfet]").onclick=()=>switchFet(pk,"dfet",card);
+  card.querySelector("[data-pwr]").onclick=()=>powerOff(pk);
+  card._pk=pk;
+  return card;
+}
+
+function updateCard(card,p){
+  card.classList.toggle("alarm",!!p.alarm);
+  card.querySelector("[data-alarm]").classList.toggle("hidden",!p.alarm);
+  const [mc,ml]=mode(p.current_a);
+  const mb=card.querySelector(".badge.mode"); mb.textContent=ml; mb.className="badge mode "+mc;
+  card.querySelector("[data-soc]").innerHTML=fmt(p.soc,0)+'<small style="font-size:14px;color:var(--muted)">%</small>';
+  card.querySelector('[data-f="voltage_v"]').textContent=fmt(p.voltage_v);
+  card.querySelector('[data-f="soh"]').textContent=fmt(p.soh,0);
+  card.querySelector('[data-f="remain_ah"]').textContent=fmt(p.remain_ah,1);
+  card.querySelector('[data-f="full_ah"]').textContent=fmt(p.full_ah,1);
+  card.querySelector('[data-f="cycles"]').textContent=fmt(p.cycles,0);
+  const cur=card.querySelector("[data-current]"); cur.className="v "+mc;
+  cur.innerHTML=(p.current_a>0?"+":"")+fmt(p.current_a)+"<small>A</small>";
+  // cells
+  const cells=[]; for(let i=1;i<=16;i++){const k="v"+String(i).padStart(2,"0"); if(p[k]!=null) cells.push([i,p[k]]);}
+  const mvs=cells.map(c=>c[1]); const mn=Math.min(...mvs), mx=Math.max(...mvs);
+  const lo=mn-15, hi=mx+15, span=Math.max(1,hi-lo);
+  cells.forEach(([i,mv])=>{
+    const el=card.querySelector(`[data-cell="${i}"]`); if(!el) return;
+    const bal=p.balance&&p.balance[i-1];
+    const crit=CELL_ALERT>0 && mv>=CELL_ALERT;
+    el.className="cell"+(mv===mn?" min":"")+(mv===mx?" max":"")+(bal?" bal":"")+(crit?" crit":"");
+    el.querySelector(".mv").textContent=mv;
+    el.querySelector(".bar").style.height=(12+Math.round(((mv-lo)/span)*78))+"%";
+  });
+  card.querySelector("[data-spread]").innerHTML=`min <b>${mn}</b> · max <b>${mx}</b> · Δ <b>${mx-mn}</b> mV`;
+  // Warnungen / Schutz
+  const pw=card.querySelector("[data-pwarn]");
+  const w=(p.warnings||[]).map(x=>`<span class="b w">⚠ ${x}</span>`).join("");
+  const pr=(p.protections||[]).map(x=>`<span class="b p">⛔ ${x}</span>`).join("");
+  pw.innerHTML=w+pr;
+  NAMES.forEach(k=>{ const tt=card.querySelector(`[data-temp="${k}"]`); if(!tt) return;
+    if(p[k]!=null){ tt.style.display=""; tt.querySelector(".v").textContent=p[k]+" °C"; } else tt.style.display="none"; });
+  // MOS buttons
+  const cb=card.querySelector("[data-cfet]"), db=card.querySelector("[data-dfet]");
+  cb.className="mosbtn "+(p.cfet==null?"unk":(p.cfet?"on":""));
+  db.className="mosbtn "+(p.dfet==null?"unk":(p.dfet?"on":""));
+  card._cfet=p.cfet; card._dfet=p.dfet;
+}
+
+const cards={}; const groups={}; let CELL_ALERT=0; let BUSES=[];
+function renderPacks(packs){
+  const main=document.getElementById("main"), empty=document.getElementById("empty");
+  if(empty) empty.remove();
+  // Bus-Reihenfolge: wie in BUSES, sonst nach Auftreten
+  const order=[]; const byBus={};
+  packs.forEach(p=>{ const b=p.bus||"BMS"; (byBus[b]=byBus[b]||[]).push(p); if(!order.includes(b)) order.push(b); });
+  const seenG=new Set(), seenC=new Set();
+  order.forEach(bus=>{
+    seenG.add(bus);
+    let g=groups[bus];
+    if(!g){
+      const el=document.createElement("section"); el.className="group";
+      el.innerHTML=`<div class="ghead"><span class="bn"></span><button class="pause" data-bus="${bus}">Pause</button></div><div class="body" style="display:grid;gap:18px"></div>`;
+      el.querySelector(".bn").textContent=bus;
+      el.querySelector(".pause").onclick=()=>togglePause(bus);
+      main.appendChild(el); g={el,body:el.querySelector(".body")}; groups[bus]=g;
+    }
+    const bi=BUSES.find(x=>x.name===bus);
+    const pb=g.el.querySelector(".pause"); if(bi){ pb.classList.toggle("on",!!bi.paused); pb.textContent=bi.paused?"Pausiert – fortsetzen":"Pause"; }
+    byBus[bus].forEach(p=>{
+      seenC.add(p.source);
+      let c=cards[p.source];
+      if(!c){ c=buildCard(p); cards[p.source]=c; }
+      if(c.parentNode!==g.body) g.body.appendChild(c);
+      updateCard(c,p);
+    });
+  });
+  Object.keys(cards).forEach(k=>{ if(!seenC.has(k)){ cards[k].remove(); delete cards[k]; } });
+  Object.keys(groups).forEach(k=>{ if(!seenG.has(k)){ groups[k].el.remove(); delete groups[k]; } });
+}
+async function togglePause(bus){
+  const bi=BUSES.find(x=>x.name===bus); const want=!(bi&&bi.paused);
+  try{ await fetch("/api/pause",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({bus,paused:want})});
+    toast("Bus "+bus+(want?" pausiert":" fortgesetzt")); }catch(e){ toast("Server nicht erreichbar","err"); }
+  tick();
+}
+
+// ---- Actions ----
+async function switchFet(pack,fet,card){
+  const cur = fet==="cfet"?card._cfet:card._dfet;
+  const target = !cur;
+  const ok=await confirmDialog(fet.toUpperCase()+" schalten",
+    `${fet.toUpperCase()} für ${pack} ${target?"einschalten":"ausschalten"}?`, !target);
+  if(!ok) return;
+  const body={pack}; body[fet]=target;
+  try{
+    const res=await (await fetch("/api/mos",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})).json();
+    if(!res.ok) toast("Fehler: "+(res.error||"unbekannt"),"err");
+    else if(res.verified===false) toast(`Gesendet, Rücklese abweichend (CFET=${res.cfet} DFET=${res.dfet})`,"warn");
+    else toast(`${fet.toUpperCase()} ${target?"ein":"aus"} – OK`);
+  }catch(e){ toast("Server nicht erreichbar","err"); }
+  tick();
+}
+async function powerOff(pack){
+  const ok=await confirmDialog("Power Off",`Power Off an ${pack} senden? (kurzer RESET)`, true);
+  if(!ok) return;
+  try{
+    const res=await (await fetch("/api/poweroff",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pack})})).json();
+    toast(res.ok?"Power Off gesendet":"Fehler: "+(res.error||"unbekannt"), res.ok?"":"err");
+  }catch(e){ toast("Server nicht erreichbar","err"); }
+}
+
+async function tick(){
+  const dot=document.getElementById("dot"), st=document.getElementById("stext");
+  try{
+    const s=await (await fetch("/api/state",{cache:"no-store"})).json();
+    CELL_ALERT=s.cell_alert_mv||0; BUSES=s.buses||[];
+    if(!s.packs||!s.packs.length){ dot.className="dot "+(s.connected?"live":"down"); st.textContent=s.error||"keine Daten"; return; }
+    renderPacks(s.packs);
+    dot.className="dot "+(s.connected?"live":"stale");
+    st.textContent=(s.connected?"live · ":"veraltet · ")+(s.updated?s.updated.replace("T"," "):"");
+  }catch(e){ dot.className="dot down"; st.textContent="Server nicht erreichbar"; }
+}
+tick(); setInterval(tick,1000);
+</script>
+</body>
+</html>

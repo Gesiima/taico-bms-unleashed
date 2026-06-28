@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VK BMS · Verlauf</title>
+<link rel="stylesheet" href="/vendor/uPlot.min.css">
+<style>
+  :root{
+    --bg:#0c1416;--panel:#11201e;--panel2:#0f1b1a;--line:#223834;
+    --text:#e9f1ef;--muted:#7e9893;--dim:#56706c;--charge:#46d6a0;--discharge:#f4a648;
+    --alarm:#ff5d5d;--mono:"Consolas",ui-monospace,monospace;--sans:system-ui,"Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans)}
+  header{position:sticky;top:0;z-index:5;background:#0d1719;border-bottom:1px solid var(--line);
+    padding:14px 22px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+  .brand{font-weight:600;letter-spacing:.14em;text-transform:uppercase;font-size:14px}
+  .brand b{color:var(--charge)}
+  nav{display:flex;gap:4px;margin-left:8px}
+  nav a{font-size:12.5px;letter-spacing:.06em;padding:6px 12px;border-radius:6px;color:var(--muted);text-decoration:none}
+  nav a.active{background:var(--panel);color:var(--text)}
+  .ver{font:11px var(--mono);color:var(--dim);padding-left:10px;border-left:1px solid var(--line)}
+  .status{margin-left:auto;display:flex;align-items:center;gap:10px;font:12.5px/1 var(--mono);color:var(--muted)}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--dim)}
+  .dot.live{background:var(--charge);box-shadow:0 0 10px 1px #46d6a060}
+  .dot.stale{background:var(--discharge)} .dot.down{background:var(--alarm)}
+  main{max-width:1280px;margin:18px auto;padding:0 18px}
+  .bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+  select,button{font:12.5px var(--mono);background:var(--panel2);color:var(--text);
+    border:1px solid var(--line);border-radius:7px;padding:7px 11px;cursor:pointer}
+  button.seg.active{background:var(--panel);color:var(--charge);border-color:#46d6a055}
+  .grp{display:flex;gap:4px}
+  label{font:11px var(--mono);color:var(--muted);letter-spacing:.06em}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
+  .hint{font:11px var(--mono);color:var(--dim);margin-top:10px}
+  input[type=datetime-local]{font:12px var(--mono);background:var(--panel2);color:var(--text);
+    border:1px solid var(--line);border-radius:7px;padding:6px 9px}
+  /* eigene, kompakte Legende */
+  #legtime{font:11px var(--mono);color:var(--charge);margin-top:12px;height:14px}
+  .legend{display:flex;flex-wrap:wrap;gap:5px 16px;margin-top:6px}
+  .lg{display:inline-flex;align-items:center;gap:6px;cursor:pointer;user-select:none;padding:2px 0}
+  .lg .box{width:11px;height:11px;border-radius:3px;border:1.5px solid var(--c);background:var(--c);flex:none}
+  .lg .lab{color:var(--muted);font:11px var(--mono)}
+  .lg .val{min-width:46px;text-align:right;font:11px var(--mono);font-variant-numeric:tabular-nums;color:var(--text)}
+  .lg.off{opacity:.4}
+  .lg.off .box{background:transparent}
+  /* sichtbarer Zoom-Auswahlbereich */
+  .u-select{background:rgba(70,214,160,.14)!important;border:1px solid var(--charge)!important;box-shadow:0 0 0 1px #46d6a040 inset}
+  #sel{font:11px var(--mono);color:var(--charge);min-width:170px}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">VK&nbsp;<b>BMS</b>&nbsp;Leitstand</div>
+  <nav>
+    <a href="/">Monitor</a>
+    <a class="active" href="/chart">Verlauf</a>
+    <a href="/settings">Einstellungen</a>
+  </nav>
+  <div class="status"><span id="dot" class="dot"></span><span id="stext">…</span><span class="ver">{{VERSION}}</span></div>
+</header>
+<main>
+  <div class="bar">
+    <label>BMS</label>
+    <select id="bms"></select>
+    <div class="grp" id="modes">
+      <button class="seg active" data-live="0">Verlauf</button>
+      <button class="seg" data-live="5">Live 5&nbsp;min</button>
+      <button class="seg" data-live="10">Live 10&nbsp;min</button>
+      <button class="seg" data-live="30">Live 30&nbsp;min</button>
+      <button class="seg" data-live="60">Live 60&nbsp;min</button>
+      <button class="seg" data-live="120">Live 2&nbsp;h</button>
+      <button class="seg" data-live="360">Live 6&nbsp;h</button>
+    </div>
+    <span id="range" style="display:flex;gap:6px;align-items:center">
+      <label>von</label><input type="datetime-local" id="from">
+      <label>bis</label><input type="datetime-local" id="to">
+      <button id="load">Laden</button>
+    </span>
+    <button id="reset" title="Zoom zurücksetzen">Zoom reset</button>
+    <span id="sel"></span>
+  </div>
+  <div class="card"><div id="chart"></div>
+    <div id="legtime"></div>
+    <div id="legend" class="legend"></div>
+    <div class="hint">Ziehen = zoomen · Doppelklick oder „Zoom reset" = Vollansicht · Zellen links (mV), Spannung &amp; Strom je eigene Achse rechts.</div>
+  </div>
+</main>
+<script src="/vendor/uPlot.iife.min.js"></script>
+<script>
+const CELLS=[...Array(16)].map((_,i)=>"v"+String(i+1).padStart(2,"0"));
+let chart=null, live=0, timer=null, source="", zoomed=false;
+const COLORS=[]; const LABELS=[]; const DEC=[];   // per series (1..18)
+
+function cellColor(i){ return `hsl(${200-(i*11)},55%,55%)`; }
+
+function cWidth(){ const el=document.getElementById("chart");
+  return Math.max(320, (el&&el.clientWidth)? el.clientWidth : Math.min(1240,window.innerWidth-60)); }
+
+function makeChart(){
+  const series=[{}];
+  CELLS.forEach((k,i)=>{ series.push({label:k.toUpperCase(),scale:"mv",stroke:cellColor(i),width:1,points:{show:false}});
+    COLORS.push(cellColor(i)); LABELS.push(k.toUpperCase()); DEC.push(0); });
+  series.push({label:"Spannung V",scale:"v",stroke:"#46d6a0",width:2,points:{show:false}});
+  COLORS.push("#46d6a0"); LABELS.push("Spannung"); DEC.push(2);
+  series.push({label:"Strom A",scale:"a",stroke:"#f4a648",width:2,points:{show:false}});
+  COLORS.push("#f4a648"); LABELS.push("Strom"); DEC.push(2);
+  const opts={
+    width: cWidth(), height:470,
+    scales:{x:{time:true}, mv:{}, v:{}, a:{}},   // drei unabhängige Y-Skalen
+    axes:[
+      {stroke:"#7e9893",grid:{stroke:"#1c2c2a"},ticks:{stroke:"#1c2c2a"}},
+      {scale:"mv",stroke:"#7e9893",grid:{stroke:"#1c2c2a"},label:"Zellspannung (mV)"},
+      {scale:"v",side:1,stroke:"#46d6a0",grid:{show:false},size:50,
+       values:(u,s)=>s.map(v=>v.toFixed(1).replace(".",",")+" V")},
+      {scale:"a",side:1,stroke:"#caa46a",grid:{show:false},size:44,
+       values:(u,s)=>s.map(v=>(v%1?v.toFixed(1):v.toFixed(0)).replace(".",",")+" A")}
+    ],
+    cursor:{drag:{x:true,y:true,uni:20}},
+    legend:{show:false},               // eigene Legende unten
+    hooks:{
+      setSelect:[u=>{
+        if(u.select.width>0){
+          zoomed=true;
+          const a=u.posToVal(u.select.left,"x"), b=u.posToVal(u.select.left+u.select.width,"x");
+          const f=t=>new Date(t*1000).toLocaleTimeString("de-DE");
+          const el=document.getElementById("sel"); if(el) el.textContent="Auswahl: "+f(a)+" – "+f(b);
+        }
+      }],
+      setCursor:[u=>updateLegendValues(u.cursor.idx)],
+      setData:[u=>updateLegendValues(null)]
+    },
+    series
+  };
+  chart=new uPlot(opts, [[]].concat(series.slice(1).map(()=>[])), document.getElementById("chart"));
+  document.getElementById("chart").addEventListener("dblclick",resetZoom);
+  buildLegend();
+  let rt=null;
+  window.addEventListener("resize",()=>{ clearTimeout(rt); rt=setTimeout(()=>{
+    if(chart) chart.setSize({width:cWidth(),height:470});
+  },150); });
+}
+
+function buildLegend(){
+  const box=document.getElementById("legend"); box.innerHTML="";
+  for(let i=0;i<LABELS.length;i++){
+    const si=i+1;                       // uPlot-Serienindex (0 = x)
+    const el=document.createElement("div"); el.className="lg"; el.dataset.si=si;
+    el.style.setProperty("--c",COLORS[i]);
+    el.innerHTML=`<span class="box"></span><span class="lab">${LABELS[i]}</span><span class="val">–</span>`;
+    el.onclick=()=>{ const sh=!chart.series[si].show; chart.setSeries(si,{show:sh}); el.classList.toggle("off",!sh); };
+    box.appendChild(el);
+  }
+}
+function updateLegendValues(idx){
+  if(!chart) return;
+  const data=chart.data; const n=data[0]?data[0].length:0;
+  const i = (idx==null) ? n-1 : idx;     // ohne Hover: letzter Wert
+  const tEl=document.getElementById("legtime");
+  if(tEl){ const t=(i>=0&&data[0])?data[0][i]:null;
+    tEl.textContent = t? "Zeit: "+new Date(t*1000).toLocaleString("de-DE") : ""; }
+  document.querySelectorAll("#legend .lg").forEach(el=>{
+    const si=+el.dataset.si; const v=(i>=0 && data[si])?data[si][i]:null;
+    el.querySelector(".val").textContent = (v==null||isNaN(v))?"–":Number(v).toFixed(DEC[si-1]);
+  });
+}
+function resetZoom(){
+  zoomed=false;
+  const el=document.getElementById("sel"); if(el) el.textContent="";
+  if(chart){ ["x","mv","v","a"].forEach(s=>chart.setScale(s,{min:null,max:null})); }
+}
+
+async function loadData(){
+  if(!source) return;
+  let url="/api/history?source="+encodeURIComponent(source)+"&max_points=2000";
+  if(live>0){ url+="&minutes="+live; }
+  else{
+    const f=document.getElementById("from").value, t=document.getElementById("to").value;
+    if(f) url+="&from="+encodeURIComponent(f+":00");   // ISO mit 'T' beibehalten
+    if(t) url+="&to="+encodeURIComponent(t+":59");
+  }
+  try{
+    const d=await (await fetch(url,{cache:"no-store"})).json();
+    const xs=(d.time||[]).map(s=>Date.parse(s)/1000);
+    const data=[xs];
+    CELLS.forEach(k=>data.push(d[k]||[]));
+    data.push(d.voltage_v||[]); data.push(d.current_a||[]);
+    // Zoom im Live-Modus bewahren
+    let keep=null;
+    if(live>0 && zoomed && chart){ const sc=chart.scales; keep={x:[sc.x.min,sc.x.max],mv:[sc.mv.min,sc.mv.max],v:[sc.v.min,sc.v.max],a:[sc.a.min,sc.a.max]}; }
+    chart.setData(data);
+    if(keep){ chart.setScale("x",{min:keep.x[0],max:keep.x[1]}); chart.setScale("mv",{min:keep.mv[0],max:keep.mv[1]});
+              chart.setScale("v",{min:keep.v[0],max:keep.v[1]}); chart.setScale("a",{min:keep.a[0],max:keep.a[1]}); }
+  }catch(e){ console.error(e); }
+}
+
+function setMode(m){
+  live=+m;
+  document.querySelectorAll("#modes .seg").forEach(b=>b.classList.toggle("active",+b.dataset.live===live));
+  document.getElementById("range").style.display = live>0 ? "none":"flex";
+  if(timer){ clearInterval(timer); timer=null; }
+  if(live===0) zoomed=false;
+  loadData();
+  if(live>0) timer=setInterval(loadData, live>=120?5000:2000);
+}
+
+async function pollStatus(){
+  try{
+    const s=await (await fetch("/api/state",{cache:"no-store"})).json();
+    const dot=document.getElementById("dot"), st=document.getElementById("stext");
+    dot.className="dot "+(s.connected?"live":(s.packs&&s.packs.length?"stale":"down"));
+    st.textContent=(s.connected?"live · ":"veraltet · ")+(s.updated?s.updated.replace("T"," "):"");
+  }catch(e){ const d=document.getElementById("dot"); if(d) d.className="dot down"; }
+}
+
+async function init(){
+  makeChart();
+  pollStatus(); setInterval(pollStatus,2000);
+  try{
+    const s=await (await fetch("/api/state")).json();
+    const sel=document.getElementById("bms");
+    (s.packs||[]).forEach(p=>{ const o=document.createElement("option"); o.value=p.source; o.textContent=p.source; sel.appendChild(o); });
+    source=(s.packs&&s.packs[0])?s.packs[0].source:"";
+    sel.onchange=()=>{ source=sel.value; resetZoom(); loadData(); };
+  }catch(e){}
+  // Default-Zeitraum: jetzt − 24 h
+  const now=new Date(), past=new Date(Date.now()-24*3600e3);
+  const iso=d=>new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);
+  document.getElementById("to").value=iso(now);
+  document.getElementById("from").value=iso(past);
+  document.querySelectorAll("#modes .seg").forEach(b=>b.onclick=()=>setMode(b.dataset.live));
+  document.getElementById("load").onclick=()=>{ resetZoom(); loadData(); };
+  document.getElementById("reset").onclick=resetZoom;
+  setMode(0);
+}
+init();
+</script>
+</body>
+</html>

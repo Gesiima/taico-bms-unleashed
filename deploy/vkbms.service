@@ -1,0 +1,38 @@
+[Unit]
+Description=VK-BMS Webserver
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/vkbms
+ExecStart=/usr/bin/python3 /opt/vkbms/run_web.py /opt/vkbms/config.yaml
+
+Restart=always
+RestartSec=5
+
+User=admin
+Group=admin
+
+Environment=PYTHONUNBUFFERED=1
+
+# Sicherheit / Hardening (kompatibel mit Python)
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+
+# Schreibzugriff fuer Datenbank + Config (Settings-Seite schreibt config.yaml)
+ReadWritePaths=/opt/vkbms
+
+# Netzwerk: localhost + LAN erlauben
+IPAddressDeny=any
+IPAddressAllow=127.0.0.1
+IPAddressAllow=192.168.0.0/16
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# SQLite / Datenbanken
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+
+# Environment
+.env
+
+# MQTT / Temp
+*.tmp
+
+# VSCode / IDE
+.vscode/
+.idea/
+
+# Build artefacts
+dist/
+build/
+
+#dont push custom
+config.yaml

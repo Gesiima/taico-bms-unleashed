@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VK BMS · Einstellungen</title>
+<style>
+  :root{
+    --bg:#0c1416;--panel:#11201e;--panel2:#0f1b1a;--line:#223834;
+    --text:#e9f1ef;--muted:#7e9893;--dim:#56706c;--charge:#46d6a0;--discharge:#f4a648;
+    --alarm:#ff5d5d;--mono:"Consolas",ui-monospace,monospace;--sans:system-ui,"Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans)}
+  header{position:sticky;top:0;z-index:5;background:#0d1719;border-bottom:1px solid var(--line);
+    padding:14px 22px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+  .brand{font-weight:600;letter-spacing:.14em;text-transform:uppercase;font-size:14px}
+  .brand b{color:var(--charge)}
+  nav{display:flex;gap:4px;margin-left:8px}
+  nav a{font-size:12.5px;letter-spacing:.06em;padding:6px 12px;border-radius:6px;color:var(--muted);text-decoration:none}
+  nav a.active{background:var(--panel);color:var(--text)}
+  .ver{font:11px var(--mono);color:var(--dim);padding-left:10px;border-left:1px solid var(--line)}
+  .status{margin-left:auto;display:flex;align-items:center;gap:10px;font:12.5px/1 var(--mono);color:var(--muted)}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--dim)}
+  .dot.live{background:var(--charge);box-shadow:0 0 10px 1px #46d6a060}
+  .dot.stale{background:var(--discharge)} .dot.down{background:var(--alarm)}
+  main{max-width:880px;margin:18px auto;padding:0 18px 80px}
+  h2{font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+     border-bottom:1px solid var(--line);padding-bottom:8px;margin:26px 0 14px}
+  .grid{display:grid;grid-template-columns:220px 1fr;gap:10px 16px;align-items:center}
+  label{font:12.5px var(--mono);color:var(--muted)}
+  input,select{font:13px var(--mono);background:var(--panel2);color:var(--text);
+    border:1px solid var(--line);border-radius:7px;padding:8px 10px;width:100%}
+  input[type=checkbox]{width:auto}
+  .bus{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:12px}
+  .bus h3{margin:0 0 12px;font:12px var(--mono);color:var(--charge);letter-spacing:.06em}
+  .bar{position:fixed;left:0;right:0;bottom:0;background:#12211f;border-top:1px solid var(--line);
+    padding:12px 22px;display:none;align-items:center;gap:14px}
+  .bar.show{display:flex}
+  .bar .msg{color:var(--discharge);font:12.5px var(--mono)}
+  button{font:12.5px var(--mono);border-radius:8px;padding:9px 16px;cursor:pointer;border:1px solid var(--line)}
+  .save{background:var(--charge);color:#06231a;border:none;font-weight:700}
+  .discard{background:transparent;color:var(--muted)}
+  .note{font:11px var(--mono);color:var(--dim);margin-top:6px}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">VK&nbsp;<b>BMS</b>&nbsp;Leitstand</div>
+  <nav>
+    <a href="/">Monitor</a>
+    <a href="/chart">Verlauf</a>
+    <a class="active" href="/settings">Einstellungen</a>
+  </nav>
+  <div class="status"><span id="dot" class="dot"></span><span id="stext">…</span><span class="ver">{{VERSION}}</span></div>
+</header>
+<main id="main">Lade Konfiguration…</main>
+
+<div style="max-width:880px;margin:0 auto 60px;padding:0 18px">
+  <button id="restartNow" style="font:12.5px var(--mono);background:transparent;color:var(--discharge);
+    border:1px solid #f4a64855;border-radius:8px;padding:9px 16px;cursor:pointer">Dienst neu starten</button>
+</div>
+
+<div class="bar" id="bar">
+  <span class="msg">Änderungen vorhanden – Speichern &amp; Neustart nötig.</span>
+  <button class="save" id="save">Speichern &amp; Neustarten</button>
+  <button class="discard" id="discard">Verwerfen</button>
+</div>
+
+<script>
+let CFG=null, ORIG="";
+const g=(o,p)=>p.split(".").reduce((a,k)=>a&&a[k],o);
+function s(o,p,v){const ks=p.split(".");let a=o;for(let i=0;i<ks.length-1;i++){a[ks[i]]=a[ks[i]]||{};a=a[ks[i]];}a[ks[ks.length-1]]=v;}
+function dirty(){ document.getElementById("bar").classList.toggle("show", JSON.stringify(CFG)!==ORIG); }
+
+function field(path,opts={}){
+  const v=g(CFG,path);
+  const t=opts.type||"text";
+  if(t==="checkbox") return `<input type="checkbox" data-path="${path}" ${v?"checked":""}>`;
+  if(t==="select") return `<select data-path="${path}">${opts.options.map(o=>`<option ${o===v?"selected":""}>${o}</option>`).join("")}</select>`;
+  return `<input type="${t}" data-path="${path}" value="${v==null?"":v}">`;
+}
+const row=(lbl,inp)=>`<label>${lbl}</label><div>${inp}</div>`;
+
+function render(){
+  const o=CFG;
+  let h=`<h2>Intervalle &amp; Logging</h2><div class="grid">
+    ${row("poll_interval (s)",field("poll_interval",{type:"number"}))}
+    ${row("live_interval (s)",field("live_interval",{type:"number"}))}
+    ${row("mqtt_interval (s)",field("mqtt_interval",{type:"number"}))}
+    ${row("db_interval (s)",field("db_interval",{type:"number"}))}
+    ${row("offline_after (Zyklen)",field("offline_after",{type:"number"}))}
+    ${row("cell_alert_mv (Zell-Alarm)",field("cell_alert_mv",{type:"number"}))}
+    ${row("log_level",field("log_level",{type:"select",options:["DEBUG","INFO","WARNING","ERROR"]}))}
+  </div>`;
+
+  h+=`<h2>Web</h2><div class="grid">
+    ${row("host",field("web.host"))}
+    ${row("port",field("web.port",{type:"number"}))}
+    ${row("Zugriffslogs",field("web.access_log",{type:"checkbox"}))}
+  </div>`;
+
+  h+=`<h2>BMS-Busse</h2>`;
+  (o.buses||[]).forEach((b,i)=>{
+    const typ=(b.connection&&b.connection.type)||"tcp";
+    const conn = typ==="serial" ? `
+      ${row("COM-Port / Device",`<input type="text" data-path="buses.${i}.connection.port" value="${(b.connection&&b.connection.port!=null)?b.connection.port:''}">`)}
+      ${row("Baudrate",field("buses."+i+".connection.baudrate",{type:"number"}))}`
+    : `
+      ${row("Host",field("buses."+i+".connection.host"))}
+      ${row("Port",field("buses."+i+".connection.port",{type:"number"}))}`;
+    h+=`<div class="bus"><h3>${b.name||("Bus "+i)} <button class="rmbus" data-i="${i}" style="float:right;font:11px var(--mono);background:transparent;color:var(--alarm);border:1px solid #ff5d5d55;border-radius:6px;padding:3px 9px;cursor:pointer">Entfernen</button></h3><div class="grid">
+      ${row("aktiv",field("buses."+i+".enabled",{type:"checkbox"}))}
+      ${row("Name",field("buses."+i+".name"))}
+      ${row("Typ",field("buses."+i+".connection.type",{type:"select",options:["tcp","serial"]}))}
+      ${conn}
+      ${row("Adressen (z.B. 1, 2)",`<input type="text" data-path="buses.${i}.addresses" data-list="1" value="${(b.addresses||[]).join(", ")}">`)}
+      ${row("Timeout (s)",field("buses."+i+".timeout",{type:"number"}))}
+    </div></div>`;
+  });
+  h+=`<button id="addbus" style="font:12.5px var(--mono);background:var(--panel2);color:var(--charge);border:1px solid #46d6a055;border-radius:8px;padding:9px 16px;cursor:pointer">+ Bus hinzufügen</button>`;
+
+  h+=`<h2>SQLite</h2><div class="grid">
+    ${row("aktiv",field("output.sqlite.enabled",{type:"checkbox"}))}
+    ${row("Pfad",field("output.sqlite.path"))}
+    ${row("retention_days (0=aus)",field("output.sqlite.retention_days",{type:"number"}))}
+  </div>`;
+
+  h+=`<h2>CSV</h2><div class="grid">
+    ${row("aktiv",field("output.csv.enabled",{type:"checkbox"}))}
+    ${row("Verzeichnis",field("output.csv.dir"))}
+  </div>`;
+
+  h+=`<h2>MQTT</h2><div class="grid">
+    ${row("aktiv",field("output.mqtt.enabled",{type:"checkbox"}))}
+    ${row("Host",field("output.mqtt.host"))}
+    ${row("Port",field("output.mqtt.port",{type:"number"}))}
+    ${row("base_topic",field("output.mqtt.base_topic"))}
+    ${row("Benutzer",field("output.mqtt.username"))}
+    ${row("Passwort",field("output.mqtt.password",{type:"password"}))}
+    ${row("Einzelzellen senden",field("output.mqtt.publish_cells",{type:"checkbox"}))}
+    ${row("state-JSON senden",field("output.mqtt.publish_state_json",{type:"checkbox"}))}
+  </div><div class="note">Passwort bleibt unverändert, solange das Feld die Maskierung (********) zeigt.</div>`;
+
+  const m=document.getElementById("main"); m.innerHTML=h;
+  m.querySelectorAll("[data-path]").forEach(el=>{
+    const ev = el.tagName==="SELECT" ? "change" : (el.type==="checkbox"?"change":"input");
+    el.addEventListener(ev,()=>{
+      let v;
+      if(el.type==="checkbox") v=el.checked;
+      else if(el.dataset.list) v=el.value.split(",").map(x=>parseInt(x.trim())).filter(x=>!isNaN(x));
+      else if(el.type==="number") v=el.value===""?null:Number(el.value);
+      else v=el.value;
+      s(CFG,el.dataset.path,v); dirty();
+      if(el.dataset.path.endsWith(".connection.type")) render();   // Felder TCP/Serial umschalten
+    });
+  });
+  const add=document.getElementById("addbus");
+  if(add) add.onclick=()=>{ (CFG.buses=CFG.buses||[]).push(
+    {name:"BMS "+(CFG.buses.length+1),enabled:true,connection:{type:"tcp",host:"192.168.2.221",port:9999},addresses:[CFG.buses.length+1],timeout:1.0});
+    render(); dirty(); };
+  m.querySelectorAll(".rmbus").forEach(btn=>btn.onclick=()=>{
+    if(!confirm("Diesen Bus entfernen?")) return;
+    CFG.buses.splice(+btn.dataset.i,1); render(); dirty(); });
+}
+
+async function load(){
+  CFG=await (await fetch("/api/config")).json();
+  ORIG=JSON.stringify(CFG);
+  render(); dirty();
+}
+document.getElementById("discard").onclick=()=>{ CFG=JSON.parse(ORIG); render(); dirty(); };
+document.getElementById("save").onclick=async()=>{
+  const r=await fetch("/api/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(CFG)});
+  const res=await r.json();
+  if(!res.ok){ alert("Speichern fehlgeschlagen: "+(res.error||"?")); return; }
+  document.getElementById("bar").innerHTML='<span class="msg">Gespeichert. Dienst startet neu… Seite lädt in 6 s neu.</span>';
+  await fetch("/api/restart",{method:"POST"});
+  setTimeout(()=>location.reload(), 6000);
+};
+async function pollStatus(){
+  try{
+    const s=await (await fetch("/api/state",{cache:"no-store"})).json();
+    const dot=document.getElementById("dot"), st=document.getElementById("stext");
+    dot.className="dot "+(s.connected?"live":(s.packs&&s.packs.length?"stale":"down"));
+    st.textContent=(s.connected?"live · ":"veraltet · ")+(s.updated?s.updated.replace("T"," "):"");
+  }catch(e){ const d=document.getElementById("dot"); if(d) d.className="dot down"; }
+}
+document.getElementById("restartNow").onclick=async()=>{
+  if(!confirm("Dienst jetzt neu starten?")) return;
+  await fetch("/api/restart",{method:"POST"});
+  document.getElementById("restartNow").textContent="Startet neu… Seite lädt in 6 s neu.";
+  setTimeout(()=>location.reload(),6000);
+};
+pollStatus(); setInterval(pollStatus,2000);
+load();
+</script>
+</body>
+</html>
