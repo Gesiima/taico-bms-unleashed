@@ -80,9 +80,17 @@ INFO-Antwort (Bytes nach dem Rahmen):
 | … | Zyklen | `u16` |
 | … | SOC | `u8` % |
 | … | SOH | `u8` % |
+| … | **Balancing-Maske** | `u16` big-endian, Bit 0 = Zelle 1 … Bit 15 = Zelle 16 |
 
 Temperaturreihenfolge: Cell T1–T4, Env, MOS (6 Sensoren).
 *Verifiziert:* 16 Zellen 3352–3458 mV, Strom 5,29 A, Spannung 54,78 V, Restkap. 150,00 Ah, Zyklen 272 — exakt deckungsgleich mit der GUI.
+
+**Balancing (verifiziert):** Direkt nach SOH folgt eine 16-Bit-Maske (Big-Endian), die
+die aktuell balancierenden Zellen angibt. Beispiel `0xF78F` → Zellen
+1,2,3,4,8,9,10,11,13,14,15,16. Das deckt sich exakt mit den Zellen, deren Spannung über
+dem Parameter *Balance starting voltage* (3450 mV) liegt und deren Abstand zur niedrigsten
+Zelle größer als *Balance starting pressure difference* (15 mV) ist. Dekodierung:
+`mask = (b[p] << 8) | b[p+1]`, Zelle *i* aktiv wenn `mask & (1 << (i-1))`.
 
 ---
 
@@ -97,9 +105,31 @@ INFO-Antwort, 46 Bytes:
 | 2 … 17 | je 1 Flag-Byte pro Zelle (0 = OK) |
 | 18 | Temp-Zahl N (6) |
 | 19 … 24 | je 1 Flag-Byte pro Temperatursensor |
-| 25 … 45 | Zustands-/Schutz-/Balance-Bitfelder, FET-Status (CFET/DFET/Vorlade/Lade/Entlade/Strombegrenzung) |
+| 25 … 45 | Zustands-/Schutz-Bitfelder + FET-Status (siehe unten) |
 
-> Die genaue Bit-Bedeutung der Zustandsbytes (Offset 25+) lässt sich vollständig nur mit einem Mitschnitt bei aktivem Alarm/Schutz festlegen. Ohne aktive Warnung sind die meisten Bytes 0.
+Die Zustandsbytes werden ab dem Ende der Temp-Flags gezählt (im Code: `state_bytes`,
+Offset 0 = erstes Byte nach den Temp-Flags). Verifiziert gegen Mitschnitte mit aktiver
+Warnung bzw. aktivem Schutz:
+
+| `state_bytes`-Offset | Bit | Bedeutung |
+|---|---|---|
+| 5 | `0x01` | **Warnung**: Zelle Überspannung |
+| 5 | `0x04` | **Warnung**: Pack Überspannung |
+| 6 | `0x01` | **Schutz**: Zelle Überspannung (latched) |
+| 10 | `0x02` | **CFET** (Lade-MOS) ein |
+| 10 | `0x01` | **DFET** (Entlade-MOS) ein |
+
+> Beobachtungen: Bei *Zelle-Überspannung-Schutz* öffnet das BMS den CFET (Bit 0x02 in
+> Offset 10 fällt weg) — Laden gestoppt, Entladen bleibt. „Power Off" (`EF`) löst einen
+> kurzen Reset aus und setzt latched Warnungen/Schutz zurück; danach schließen die FETs
+> wieder.
+>
+> Byte mit Offset 9 ist eine **Strom-Richtungsanzeige** (Bit 0x40 = Laden aktiv,
+> Bit 0x80 = Entladen aktiv), **kein** Schalter — nicht mit dem FET-Status verwechseln.
+>
+> Weitere Warn-/Schutzarten (Unterspannung, Übertemperatur, Überstrom …) sind noch nicht
+> zugeordnet, da bisher keine Mitschnitte mit diesen Zuständen vorliegen. Ohne aktive
+> Warnung sind die übrigen Bytes 0.
 
 ---
 
