@@ -127,7 +127,6 @@ http://www.hi-flying.com/hf5122
 2. MOS-Tab: CFET/DFET/Strombegrenzung schalten (CID2 E2) mit Bestätigung + Statusrückmeldung.
 3. System-Config-Tab: Zeit/Kapazität/Kalibrierung/Produktinfo.
 
-Die Navigationspunkte dafür sind im Dashboard schon angelegt (als „bald").
 Protokoll-Details: siehe `VKING_BMS_Protokoll_Spezifikation.md`.
 
 ## Attribution
