@@ -1,6 +1,7 @@
 # Project Attribution
-Parts of this project were developed with assistance from Claude (Anthropic).
-All modifications, extensions, and the final structure were created by Gesiima.
+All source code in this project was generated with assistance from Claude (Anthropic),
+based entirely on functional descriptions, constraints, and iterative refinement
+instructions provided by Gesiima. No manual code editing was performed.
 
 
                     GNU AFFERO GENERAL PUBLIC LICENSE
