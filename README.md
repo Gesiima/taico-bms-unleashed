@@ -112,3 +112,10 @@ config.example.yaml
 
 Die Navigationspunkte dafür sind im Dashboard schon angelegt (als „bald").
 Protokoll-Details: siehe `VKING_BMS_Protokoll_Spezifikation.md`.
+
+## Attribution
+
+The code in this project was generated with assistance from Claude (Anthropic).  
+All functional requirements, architectural decisions, corrections, and instructions  
+were provided by Gesiima. No manual code editing was performed; the implementation  
+was produced iteratively based on high‑level guidance and refinement instructions.
