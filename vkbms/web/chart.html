@@ -111,10 +111,11 @@ function makeChart(){
     scales:{x:{time:true}, mv:{}, v:{}, a:{}},   // drei unabhängige Y-Skalen
     axes:[
       {stroke:"#7e9893",grid:{stroke:"#1c2c2a"},ticks:{stroke:"#1c2c2a"}},
-      {scale:"mv",stroke:"#7e9893",grid:{stroke:"#1c2c2a"},label:"Zellspannung (mV)"},
+      {scale:"mv",stroke:"#7e9893",grid:{stroke:"#1c2c2a"},label:"Zellspannung (mV)",
+       values:(u,s)=>s.map(v=>Math.round(v).toLocaleString("de-DE"))},
       {scale:"v",side:1,stroke:"#46d6a0",grid:{show:false},size:50,
        values:(u,s)=>s.map(v=>v.toFixed(1).replace(".",",")+" V")},
-      {scale:"a",side:1,stroke:"#caa46a",grid:{show:false},size:44,
+      {scale:"a",side:1,stroke:"#caa46a",grid:{show:false},size:58,
        values:(u,s)=>s.map(v=>(v%1?v.toFixed(1):v.toFixed(0)).replace(".",",")+" A")}
     ],
     cursor:{drag:{x:true,y:true,uni:20}},

@@ -234,12 +234,22 @@ class Engine:
         mask = ((P.MOS_CFET if want_cfet else 0)
                 | (P.MOS_DFET if want_dfet else 0)
                 | (P.MOS_CURRENT_LIMIT if st["cl"] else 0))
+        status = None
         try:
             with bus.lock:
                 bus.transport.query(P.req_mos_control(addr, mask), bus.timeout)
-                time.sleep(0.3)
-                sresp = P.parse_frame(bus.transport.query(P.req_status(addr), bus.timeout))
-            status = P.decode_status(sresp) if sresp.ok else None
+                deadline = time.monotonic() + 2.0
+                while True:
+                    time.sleep(0.3)
+                    try:
+                        sresp = P.parse_frame(bus.transport.query(P.req_status(addr), bus.timeout))
+                        status = P.decode_status(sresp) if sresp.ok else status
+                    except (TransportError, P.ProtocolError, IndexError):
+                        pass  # einzelne Lesefehler tolerieren, bis Deadline
+                    if status and status.cfet_on == want_cfet and status.dfet_on == want_dfet:
+                        break
+                    if time.monotonic() >= deadline:
+                        break
         except (TransportError, P.ProtocolError, IndexError) as e:
             log.warning("set_mos %s failed: %s", pack_key, e)
             return {"ok": False, "error": str(e)}

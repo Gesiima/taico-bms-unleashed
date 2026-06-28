@@ -2,6 +2,15 @@
 
 Format: neueste Version oben. Versionierung: MAJOR.MINOR.PATCH.
 
+## [0.8.1] — 2026-06-28
+### Behoben
+- MOS-Schaltung: Rücklese prüft jetzt bis zu ~2 s (mehrfach) statt einmalig nach 0,3 s.
+  Verhindert die falsche Meldung „Rücklese abweichend" bei langsamer reagierenden BMS.
+- Verlauf: mV-Achse bleibt beim Reinzoomen ganzzahlig (Tausender-Trenner, z. B. „3.345"),
+  keine Nachkommastelle mehr.
+- Verlauf: Strom-Achse verbreitert — „A" wird bei negativen Werten mit Nachkomma nicht
+  mehr abgeschnitten.
+
 ## [0.8.0] — 2026-06-28
 ### Monitor / Dashboard
 - Master-Sub-Packs werden jetzt **gruppiert** dargestellt: pro Bus/Leitung eine Überschrift,
