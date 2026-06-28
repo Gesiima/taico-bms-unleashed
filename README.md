@@ -89,6 +89,13 @@ run_logger.py    Einstiegspunkt headless
 config.example.yaml
 ```
 
+## Anbindung mittels TCP RS232 device Server
+Ich nutze hier dieses Gerät, es sollte aber wohl jeder vcom fähige Adapter gehen.
+http://www.hi-flying.com/hf5122
+<img src="docs/netport_config.png" width="700">
+
+<img src="docs/serialport_config.png" width="700">
+
 ## Screenshots
 <img src="docs/monitor.png" width="700">
 
