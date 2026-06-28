@@ -1,7 +1,9 @@
 # Project Attribution
-All source code in this project was generated with assistance from Claude (Anthropic),
-based entirely on functional descriptions, constraints, and iterative refinement
-instructions provided by Gesiima. No manual code editing was performed.
+This project is built collaboratively: the coding is done by Claude (Anthropic),
+while the features are developed together with Gesiima. All requirements,
+architectural decisions, the direction of the protocol reverse-engineering,
+real-hardware testing and every correction and refinement come from Gesiima;
+Claude turns them into code iteratively. No code was written by hand.
 
 
                     GNU AFFERO GENERAL PUBLIC LICENSE

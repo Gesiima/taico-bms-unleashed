@@ -177,9 +177,11 @@ Steuerung unter `control/` (CFET/DFET), Temperaturen, Kennwerte und der Online-S
 Aktuelle Version: **v0.8.1**. Änderungen je Release in `CHANGELOG.md`, geplante Punkte
 in `ROADMAP.md`.
 
-## Attribution
+## Mitwirkung / Attribution
 
-The code in this project was generated with assistance from Claude (Anthropic).
-All functional requirements, architectural decisions, corrections, and instructions
-were provided by Gesiima. No manual code editing was performed; the implementation
-was produced iteratively based on high‑level guidance and refinement instructions.
+Dieses Projekt entsteht in Zusammenarbeit: Das **Coding übernimmt Claude (Anthropic)**,
+die Funktionen werden **gemeinsam erarbeitet**. Anforderungen, Architekturentscheidungen,
+die Richtung des Protokoll-Reverse-Engineering, das Testen am realen BMS sowie alle
+Korrekturen und Verfeinerungen stammen von **Gesiima**; Claude setzt sie iterativ in Code
+um. Es wurde kein Code manuell geschrieben — die Umsetzung erfolgt vollständig über
+schrittweise Anweisungen und gemeinsame Abstimmung.

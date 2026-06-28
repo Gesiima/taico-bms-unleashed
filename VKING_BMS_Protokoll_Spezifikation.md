@@ -345,3 +345,11 @@ INFO: Pack. Versetzt das BMS in den Abschalt-/Schlafzustand (öffnet die MOSFETs
 - **Robustheit:** pro Abfrage `try/except`, fehlende Antwort tolerieren, kein Absturz der Schleife. (Die Original-GUI bricht gelegentlich ab — eine eigene, sauber gekapselte Schleife ist stabiler.)
 - **GUI-Passwort `vking`** ist nur eine lokale Sperre der Hersteller-Oberfläche und wird **nicht** über die Leitung gesendet. Ein eigenes Tool benötigt es nicht.
 - **Schreiben mit Bedacht:** Parameter- und Kalibrierungswerte sollten nach dem Schreiben sofort zurückgelesen und verglichen werden. Falsche Schutzparameter können Sicherheitsfunktionen verstellen.
+
+---
+
+## Mitwirkung
+
+Reverse-Engineering und Verifikation dieser Spezifikation: **Gesiima** (Richtung,
+Mitschnitte, Tests am realen BMS). Auswertung, Dokumentation und Code: **Claude
+(Anthropic)**. Die Inhalte entstanden gemeinsam und iterativ.
