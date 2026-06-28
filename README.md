@@ -133,20 +133,42 @@ deploy/              systemd-Unit + Server-Anleitung
 docs/                Screenshots, Gateway-Konfiguration
 ```
 
-## Anbindung mittels TCP-RS232-Device-Server
+## Hardware-Anbindung (TCP-RS232-Device-Server)
 
-Verwendet wird dieses Gerät; jeder VCOM-fähige Adapter sollte funktionieren:
-http://www.hi-flying.com/hf5122
+Das BMS spricht RS232; ich binde es über einen Ethernet-Seriell-Gateway ins Netz ein,
+sodass kein PC direkt am BMS hängen muss. Verwendet wird ein
+[Hi-Flying HF5122](http://www.hi-flying.com/hf5122) — grundsätzlich sollte aber jeder
+VCOM-fähige Seriell-zu-Ethernet-Adapter funktionieren.
+
+**Netzwerk-Port (TCP-Server):** Pro BMS-Leitung ein Port im Modus *TCP Server*. Der
+lokale Port (hier `9999`) ist später `connection.port` in der `config.yaml`, die Route
+zeigt auf den passenden UART. Entscheidend ist **`Max Accept = 1`** — der Gateway lässt
+nur **eine** Verbindung gleichzeitig zu, also entweder dieses Tool *oder* die
+Hersteller-Software. `Timeout = 0` lässt die Verbindung offen.
 
 <img src="docs/netport_config.png" width="500">
+
+**Serielle Parameter:** Das VK48150-BMS arbeitet mit **9600 Baud, 8 Datenbits, kein
+Paritätsbit, 1 Stoppbit (8N1)**, ohne Flusskontrolle. Diese Werte müssen am Gateway exakt
+so gesetzt sein.
 
 <img src="docs/serialport_config.png" width="500">
 
 ## Screenshots
 
+**Monitor** — Live-Übersicht beider Packs, nach Bus gruppiert: Modus, SOC, Messwerte,
+Zellbalken mit Min/Max/Δ, Balancing-Markierung, Warn-/Schutz-Badge sowie CFET/DFET- und
+Power-Off-Steuerung je Pack.
+
 <img src="docs/monitor.png" width="700">
 
+**Verlauf** — Zellspannungen, Pack-Spannung und Strom auf eigenen Achsen, mit Live-Modi,
+Zoom und cursorgenauer Werteanzeige in der Legende.
+
 <img src="docs/diagram.png" width="700">
+
+**MQTT in ioBroker** — die veröffentlichten Topics je Pack: Einzelzellen unter `cells/`,
+Steuerung unter `control/` (CFET/DFET), Temperaturen, Kennwerte und der Online-Status.
 
 <img src="docs/mqtt_in_iobroker.png" width="700">
 
