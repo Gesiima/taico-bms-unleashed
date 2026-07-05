@@ -2,6 +2,17 @@
 
 Format: neueste Version oben. Versionierung: MAJOR.MINOR.PATCH.
 
+## [0.11.0] — 2026-07-05
+### Verlauf
+- **SOC-Linie** im Diagramm (weiß, Linienstärke wie Spannung/Strom, feste Skala 0–100
+  ohne sichtbare Achse; folgt Cursor/Legende). `soc` wird dafür in der History mitgeliefert.
+- **Diagrammhöhe ziehbar**: unten am Rand des Charts anfassen und die Höhe anpassen
+  (uPlot zeichnet via ResizeObserver neu, Höhe wird pro Sitzung gemerkt).
+- **Legenden-Hover-Highlight**: Mauszeiger über einen Legendeneintrag hebt diese Linie
+  hervor und dimmt die übrigen — hilfreich bei vielen Zellkurven.
+- **Neue Zellfarben-Palette**: geordneter Farbkreis (Zelle 1→16) mit alternierender
+  Helligkeit; dunkle Blautöne angehoben für bessere Lesbarkeit.
+
 ## [0.10.0] — 2026-07-05
 ### Hinzugefügt
 - **Zellbalken-Maßstab umschaltbar** (Umschalter „Fest / Relativ" im Dashboard-Header,
