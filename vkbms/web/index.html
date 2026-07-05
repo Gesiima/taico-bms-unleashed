@@ -39,25 +39,24 @@
     border:1px solid #ff5d5d55;background:transparent;color:var(--alarm);cursor:pointer}
   .pwr:hover{background:#ff5d5d18}
 
-  main{max-width:1180px;margin:22px auto;padding:0 18px;display:grid;gap:26px}
-  .group{display:grid;gap:14px}
-  .ghead{display:flex;align-items:center;gap:10px;font:12px var(--mono);letter-spacing:.1em;
-    text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line);padding-bottom:7px}
-  .ghead .pause{margin-left:auto;font:11px var(--mono);padding:5px 11px;border-radius:7px;
-    border:1px solid var(--line);background:var(--panel2);color:var(--muted);cursor:pointer}
-  .ghead .pause.on{color:var(--discharge);border-color:#f4a64855}
+  main{max-width:1920px;margin:14px auto 0;padding:0 18px 14px;display:grid;gap:16px}
   .empty{color:var(--muted);font:13px var(--mono);padding:60px;text-align:center;border:1px dashed var(--line);border-radius:12px}
   .pack{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
   .pack.alarm{border-color:var(--alarm);box-shadow:0 0 0 1px #ff5d5d40}
   .ptop{display:flex;align-items:center;gap:16px;padding:16px 20px;border-bottom:1px solid var(--line);flex-wrap:wrap}
-  .pid{font-weight:600;letter-spacing:.1em;text-transform:uppercase;font-size:13px;color:var(--muted)}
-  .pid b{color:var(--text);font-size:16px;margin-left:6px}
+  .pid{display:flex;flex-direction:column;justify-content:center;line-height:1}
+  .pid b{color:var(--text);font:600 30px/1 var(--mono)}
+  .pid .sub{font:11px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-top:5px}
   .badge{font:11px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;padding:5px 10px;border-radius:20px;border:1px solid currentColor}
   .badge.mode{min-width:92px;text-align:center}
   .badge.charge{color:var(--charge)} .badge.discharge{color:var(--discharge)} .badge.idle{color:var(--idle)}
   .badge.warn{color:var(--alarm);border-color:var(--alarm)} .badge.hidden{display:none}
   .soc{margin-left:auto;text-align:right}
   .soc .v{font:600 30px/1 var(--mono)} .soc .l{font:11px var(--mono);color:var(--muted);letter-spacing:.1em}
+  .alerts{display:flex;flex-wrap:wrap;gap:7px;padding:0 20px}
+  .alerts:not(:empty){padding:12px 20px;border-bottom:1px solid var(--line)}
+  .alerts .b{font:11px var(--mono);letter-spacing:.05em;padding:5px 11px;border-radius:20px;border:1px solid currentColor}
+  .alerts .b.w{color:var(--discharge)} .alerts .b.p{color:var(--alarm)}
   .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:1px;background:var(--line)}
   .m{background:var(--panel2);padding:13px 16px}
   .m .l{font:10.5px var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
@@ -68,6 +67,10 @@
   .cells-head{display:flex;align-items:baseline;gap:14px;margin-bottom:14px}
   .cells-head .t{font:11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
   .cells-head .spread{font:12px var(--mono);color:var(--muted)} .cells-head .spread b{color:var(--text)}
+  .cells-head .pause{margin-left:auto;font:11px var(--mono);padding:5px 12px;border-radius:7px;
+    border:1px solid var(--line);background:var(--panel2);color:var(--muted);cursor:pointer}
+  .cells-head .pause.on{color:var(--discharge);border-color:#f4a64855}
+  .cells-head .pause.hidden{display:none}
   .strip{display:grid;grid-template-columns:repeat(16,1fr);gap:6px;align-items:end;height:130px}
   @media(max-width:620px){.strip{grid-template-columns:repeat(8,1fr);height:auto;grid-auto-rows:64px}}
   .cell{position:relative;height:100%;display:flex;flex-direction:column;justify-content:flex-end;
@@ -82,9 +85,6 @@
   .cell.warn .bar{background:var(--discharge)!important}
   .cell.crit{box-shadow:0 0 0 1.5px var(--alarm) inset}
   .cell.crit .bar{background:var(--alarm)!important} .cell.crit .mv{color:var(--alarm)}
-  .pwarn{display:flex;gap:6px;flex-wrap:wrap}
-  .pwarn .b{font:10px var(--mono);letter-spacing:.05em;padding:4px 9px;border-radius:20px;border:1px solid currentColor}
-  .pwarn .b.w{color:var(--discharge)} .pwarn .b.p{color:var(--alarm)}
   .temps{display:flex;flex-wrap:wrap;gap:1px;background:var(--line);border-top:1px solid var(--line)}
   .temps .tt{background:var(--panel2);padding:11px 16px;flex:1;min-width:90px}
   .temps .tt .l{font:10px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
@@ -159,10 +159,8 @@ function buildCard(p){
   let temps=""; NAMES.forEach(k=>{ temps+=`<div class="tt" data-temp="${k}" style="display:none"><div class="l">${TLABEL[k]}</div><div class="v"></div></div>`; });
   card.innerHTML=`
     <div class="ptop">
-      <div class="pid"><b>${p.source||('Pack '+p.pack)}</b></div>
+      <div class="pid"><b>${p.bus||p.source||('Pack '+p.pack)}</b><span class="sub" data-sub></span></div>
       <span class="badge mode"></span>
-      <span class="badge warn hidden" data-alarm>Alarm</span>
-      <div class="pwarn" data-pwarn></div>
       <div class="mos">
         <button class="mosbtn" data-cfet><span>CFET</span> <i></i></button>
         <button class="mosbtn" data-dfet><span>DFET</span> <i></i></button>
@@ -170,6 +168,7 @@ function buildCard(p){
       </div>
       <div class="soc"><div class="v" data-soc></div><div class="l">SOC</div></div>
     </div>
+    <div class="alerts" data-alerts></div>
     <div class="metrics">
       <div class="m"><div class="l">Spannung</div><div class="v"><span data-f="voltage_v"></span><small>V</small></div></div>
       <div class="m"><div class="l">Strom</div><div class="v" data-current><small>A</small></div></div>
@@ -179,7 +178,8 @@ function buildCard(p){
       <div class="m"><div class="l">Zyklen</div><div class="v"><span data-f="cycles"></span></div></div>
     </div>
     <div class="cells">
-      <div class="cells-head"><span class="t">Zellspannungen</span><span class="spread" data-spread></span></div>
+      <div class="cells-head"><span class="t">Zellspannungen</span><span class="spread" data-spread></span>
+        <button class="pause hidden" data-pause>Pause</button></div>
       <div class="strip">${strip}</div>
     </div>
     <div class="temps">${temps}</div>`;
@@ -187,13 +187,13 @@ function buildCard(p){
   card.querySelector("[data-cfet]").onclick=()=>switchFet(pk,"cfet",card);
   card.querySelector("[data-dfet]").onclick=()=>switchFet(pk,"dfet",card);
   card.querySelector("[data-pwr]").onclick=()=>powerOff(pk);
+  card.querySelector("[data-pause]").onclick=()=>togglePause(p.bus);
   card._pk=pk;
   return card;
 }
 
-function updateCard(card,p){
+function updateCard(card,p,meta){
   card.classList.toggle("alarm",!!p.alarm);
-  card.querySelector("[data-alarm]").classList.toggle("hidden",!p.alarm);
   const [mc,ml]=mode(p.current_a);
   const mb=card.querySelector(".badge.mode"); mb.textContent=ml; mb.className="badge mode "+mc;
   card.querySelector("[data-soc]").innerHTML=fmt(p.soc,0)+'<small style="font-size:14px;color:var(--muted)">%</small>';
@@ -217,11 +217,12 @@ function updateCard(card,p){
     el.querySelector(".bar").style.height=(12+Math.round(((mv-lo)/span)*78))+"%";
   });
   card.querySelector("[data-spread]").innerHTML=`min <b>${mn}</b> · max <b>${mx}</b> · Δ <b>${mx-mn}</b> mV`;
-  // Warnungen / Schutz
-  const pw=card.querySelector("[data-pwarn]");
-  const w=(p.warnings||[]).map(x=>`<span class="b w">⚠ ${x}</span>`).join("");
-  const pr=(p.protections||[]).map(x=>`<span class="b p">⛔ ${x}</span>`).join("");
-  pw.innerHTML=w+pr;
+  // Warnungen / Schutz — Schutz überdeckt gleichnamige Warnung
+  const prot=p.protections||[];
+  const warn=(p.warnings||[]).filter(x=>!prot.includes(x));
+  card.querySelector("[data-alerts]").innerHTML =
+      prot.map(x=>`<span class="b p">⛔ Alarm: ${x}</span>`).join("")
+    + warn.map(x=>`<span class="b w">⚠ Warnung: ${x}</span>`).join("");
   NAMES.forEach(k=>{ const tt=card.querySelector(`[data-temp="${k}"]`); if(!tt) return;
     if(p[k]!=null){ tt.style.display=""; tt.querySelector(".v").textContent=p[k]+" °C"; } else tt.style.display="none"; });
   // MOS buttons
@@ -229,38 +230,36 @@ function updateCard(card,p){
   cb.className="mosbtn "+(p.cfet==null?"unk":(p.cfet?"on":""));
   db.className="mosbtn "+(p.dfet==null?"unk":(p.dfet?"on":""));
   card._cfet=p.cfet; card._dfet=p.dfet;
+  // Titel-Unterzeile + Pause (nur primäres Pack des Bus)
+  if(meta){
+    card.querySelector("[data-sub]").textContent="Pack "+meta.idx+"/"+meta.total;
+    const pb=card.querySelector("[data-pause]");
+    if(meta.primary){ pb.classList.remove("hidden"); pb.classList.toggle("on",!!meta.paused);
+      pb.textContent=meta.paused?"Bus fortsetzen":"Bus pausieren"; }
+    else pb.classList.add("hidden");
+  }
 }
 
-const cards={}; const groups={}; let CELL_ALERT=0; let BUSES=[];
+const cards={}; let CELL_ALERT=0; let BUSES=[];
 function renderPacks(packs){
   const main=document.getElementById("main"), empty=document.getElementById("empty");
   if(empty) empty.remove();
-  // Bus-Reihenfolge: wie in BUSES, sonst nach Auftreten
+  // nach Bus gruppieren (nur für Reihenfolge + Pack i/n), aber flach rendern
   const order=[]; const byBus={};
   packs.forEach(p=>{ const b=p.bus||"BMS"; (byBus[b]=byBus[b]||[]).push(p); if(!order.includes(b)) order.push(b); });
-  const seenG=new Set(), seenC=new Set();
+  const seen=new Set();
   order.forEach(bus=>{
-    seenG.add(bus);
-    let g=groups[bus];
-    if(!g){
-      const el=document.createElement("section"); el.className="group";
-      el.innerHTML=`<div class="ghead"><span class="bn"></span><button class="pause" data-bus="${bus}">Pause</button></div><div class="body" style="display:grid;gap:18px"></div>`;
-      el.querySelector(".bn").textContent=bus;
-      el.querySelector(".pause").onclick=()=>togglePause(bus);
-      main.appendChild(el); g={el,body:el.querySelector(".body")}; groups[bus]=g;
-    }
+    const list=byBus[bus].slice().sort((a,b)=>(a.pack||0)-(b.pack||0));
     const bi=BUSES.find(x=>x.name===bus);
-    const pb=g.el.querySelector(".pause"); if(bi){ pb.classList.toggle("on",!!bi.paused); pb.textContent=bi.paused?"Pausiert – fortsetzen":"Pause"; }
-    byBus[bus].forEach(p=>{
-      seenC.add(p.source);
+    list.forEach((p,idx)=>{
+      seen.add(p.source);
       let c=cards[p.source];
       if(!c){ c=buildCard(p); cards[p.source]=c; }
-      if(c.parentNode!==g.body) g.body.appendChild(c);
-      updateCard(c,p);
+      if(c.parentNode!==main) main.appendChild(c);
+      updateCard(c,p,{idx:idx+1,total:list.length,primary:idx===0,paused:bi&&bi.paused});
     });
   });
-  Object.keys(cards).forEach(k=>{ if(!seenC.has(k)){ cards[k].remove(); delete cards[k]; } });
-  Object.keys(groups).forEach(k=>{ if(!seenG.has(k)){ groups[k].el.remove(); delete groups[k]; } });
+  Object.keys(cards).forEach(k=>{ if(!seen.has(k)){ cards[k].remove(); delete cards[k]; } });
 }
 async function togglePause(bus){
   const bi=BUSES.find(x=>x.name===bus); const want=!(bi&&bi.paused);

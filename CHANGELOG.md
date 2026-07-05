@@ -2,6 +2,33 @@
 
 Format: neueste Version oben. Versionierung: MAJOR.MINOR.PATCH.
 
+## [0.9.0] — 2026-06-28
+### ⚠️ Breaking — MQTT-Topics umstrukturiert
+- Packs werden jetzt **eindeutig je Bus** adressiert: `bms/<name>/pack<id>/…`
+  (Name aus der Konfig, kleingeschrieben/ohne Leerzeichen). Damit ist „BMS 1, Adresse 2"
+  klar von „BMS 2" getrennt — vorher schrieben beide nach `pack2`.
+  **Aufräumen:** alte `bms/packX/…`-Objekte im Broker/ioBroker löschen.
+- FET-Befehle entsprechend: `bms/<name>/pack<id>/control/{cfet,dfet,poweroff}/set`.
+### Hinzugefügt
+- **Balancing** in MQTT (`…/balance_mask`, `…/balancing`) und in der SQLite-DB
+  (`balance_mask`). Bestehende DBs werden automatisch migriert.
+- **Alarme/Warnungen/Schutz** in MQTT (`…/alarm`, `…/warnings`, `…/protections`) und DB
+  (`alarm`, `warnings`, `protections`).
+- **Datenbank-Download** über die Einstellungs-Seite (`/api/db/download`, mit WAL-Checkpoint).
+- Deaktivierte Busse (Config `enabled: false`) werden in MQTT als **offline** gemeldet
+  (vorher blieb fälschlich `online` stehen).
+### Monitor
+- Gruppierung aufgelöst: Karten flach, Titel **zweizeilig** (Bus-Name groß wie SOC,
+  darunter „Pack i/n"). **Pause** sitzt jetzt klar beschriftet in der Zellspannungs-Zeile
+  des primären Packs.
+- Alarm-/Warn-Badges in **eigener Zeile** (verschieben die Buttons nicht mehr); Schutz
+  überdeckt die gleichnamige Warnung.
+- Maximale Breite bis FullHD (1920 px); Scrollbalken-Überstand beseitigt.
+### Verlauf
+- Deutlich **kontrastreichere Zellfarben** (16er-Palette).
+- Diagrammbreite folgt dem Browserfenster (keine feste Obergrenze mehr).
+- Toolbar bricht nicht mehr um (feste Breite des BMS-Wählers); Legende enger.
+
 ## [0.8.1] — 2026-06-28
 ### Behoben
 - MOS-Schaltung: Rücklese prüft jetzt bis zu ~2 s (mehrfach) statt einmalig nach 0,3 s.

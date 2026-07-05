@@ -144,6 +144,9 @@ def _s16(b: bytes, i: int) -> int:
 class AnalogReading:
     address: int
     source: str = ""               # unique display identity (set by poller)
+    pack_key: str = ""             # unique routing/MQTT key, e.g. "bms1/pack2"
+    warnings: list = field(default_factory=list)      # set by poller from status
+    protections: list = field(default_factory=list)   # set by poller from status
     balance_mask: int = 0          # 16-bit per-cell balancing mask (bit0 = cell 1)
     cells_mv: list[int] = field(default_factory=list)
     temps_c: list[int] = field(default_factory=list)   # CellT1..4, Env, MOS

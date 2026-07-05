@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Optional
@@ -29,6 +30,18 @@ class Bus:
     read_status: bool = True
     timeout: float = 1.0
     lock: threading.Lock = field(default_factory=threading.Lock)  # serialize socket use
+
+
+def _slug(name: str) -> str:
+    """Topic-/Key-tauglicher Slug aus einem Bus-Namen, z. B. "BMS 1" -> "bms1"."""
+    s = re.sub(r"[^a-z0-9]+", "", (name or "").lower())
+    return s or "bms"
+
+
+def pack_key(bus: "Bus", address: int) -> str:
+    """Eindeutiger Schlüssel je Pack über Bus + Adresse (kollisionsfrei auch bei
+    gleicher Adresse auf verschiedenen Bussen). Form: "<busslug>/pack<addr>"."""
+    return f"{_slug(bus.name)}/pack{address}"
 
 
 def pack_identity(bus: Bus, address: int) -> str:
@@ -86,6 +99,10 @@ def poll_pack(bus: Bus, address: int):
             return None
         analog = P.decode_analog(resp)
         analog.source = pack_identity(bus, address)
+        analog.pack_key = pack_key(bus, address)
+        if status is not None:
+            analog.warnings = status.warnings
+            analog.protections = status.protections
     except (TransportError, P.ProtocolError, IndexError) as e:
         log.debug("[%s] pack %d analog failed: %s", bus.name, address, e)
         return None
@@ -127,14 +144,22 @@ class Engine:
         self.paused = set()           # bus names paused at runtime
         # per-pack availability tracking (online/offline via MQTT)
         self.offline_after = int(cfg.get("offline_after", 3))
-        self._expected = [f"pack{a}" for b in self.buses for a in b.addresses]
+        active = [pack_key(b, a) for b in self.buses for a in b.addresses]
+        # auch deaktivierte Busse kennen, damit sie in MQTT als offline erscheinen
+        disabled = []
+        for bd in cfg.get("buses", []):
+            if bd.get("enabled", True):
+                continue
+            slug = _slug(bd.get("name", ""))
+            for a in _parse_addresses(bd.get("addresses", [])):
+                disabled.append(f"{slug}/pack{a}")
+        self._expected = active + disabled
         self._miss = {k: 0 for k in self._expected}
         self._online = {k: None for k in self._expected}
-        # map pack key -> (bus, address) for MOS / power-off commands
-        self._pack_map = {f"pack{a}": (b, a) for b in self.buses for a in b.addresses}
+        # map pack key -> (bus, address) for MOS / power-off commands (nur aktive)
+        self._pack_map = {pack_key(b, a): (b, a) for b in self.buses for a in b.addresses}
         # desired MOS state per pack; cfet/dfet mirror the BMS, cl is tool-tracked
-        # (current-limiting is not readable from status, defaults off, no button)
-        self.mos = {k: {"cfet": None, "dfet": None, "cl": False} for k in self._expected}
+        self.mos = {k: {"cfet": None, "dfet": None, "cl": False} for k in active}
 
     def _due(self, now: float) -> dict:
         out = {}
@@ -184,7 +209,7 @@ class Engine:
     def _update_availability(self, readings) -> None:
         """Mark each expected pack online/offline (with miss tolerance), log the
         transition once, and push it to sinks that support it (MQTT)."""
-        responded = {f"pack{a.address}" for a, _ in readings}
+        responded = {a.pack_key for a, _ in readings}
         for key in self._expected:
             if key in responded:
                 self._miss[key] = 0
@@ -210,7 +235,7 @@ class Engine:
         for analog, status in readings:
             if status is None:
                 continue
-            key = f"pack{analog.address}"
+            key = analog.pack_key
             if key not in self.mos:
                 continue
             if status.cfet_on is not None:

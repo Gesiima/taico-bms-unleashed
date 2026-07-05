@@ -25,6 +25,8 @@ Erledigte Releases sind in `CHANGELOG.md` dokumentiert. Hier nur der Ausblick.
 
 **Daten**
 - CSV-/Daten-Export direkt aus der Chart-Seite.
+- Test-/Demo-Modus: Dummy-Daten in eine temporäre Datenbank schreiben (zum Ausprobieren
+  ohne echtes BMS).
 
 **Sicherheit**
 - Optional: Authentifizierung für die Web-Oberfläche.

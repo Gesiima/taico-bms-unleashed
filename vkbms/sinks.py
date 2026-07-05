@@ -31,6 +31,10 @@ def reading_to_dict(r: AnalogReading, source: str = "") -> dict:
         "source": name,           # unique identity (display + key + filename)
         "pack": r.address,        # on-wire address
         "balance": [bool((r.balance_mask >> i) & 1) for i in range(16)],
+        "balance_mask": int(r.balance_mask),
+        "warnings": ", ".join(r.warnings),
+        "protections": ", ".join(r.protections),
+        "alarm": 1 if (r.warnings or r.protections) else 0,
         "voltage_v": r.voltage_v,
         "current_a": r.current_a,
         "soc": r.soc,
@@ -69,8 +73,15 @@ class SqliteSink:
                 min_mv INTEGER, max_mv INTEGER, delta_mv INTEGER,
                 cell_t1 INTEGER, cell_t2 INTEGER, cell_t3 INTEGER, cell_t4 INTEGER,
                 env_t INTEGER, mos_t INTEGER,
+                balance_mask INTEGER, warnings TEXT, protections TEXT, alarm INTEGER,
                 {cells}
             )""")
+        # Migration: fehlende Spalten in bestehenden DBs ergänzen
+        have = {row[1] for row in self.conn.execute("PRAGMA table_info(readings)")}
+        for col, typ in (("balance_mask", "INTEGER"), ("warnings", "TEXT"),
+                         ("protections", "TEXT"), ("alarm", "INTEGER")):
+            if col not in have:
+                self.conn.execute(f"ALTER TABLE readings ADD COLUMN {col} {typ}")
         self.conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_source_time ON readings(source, time)")
         self.conn.commit()
@@ -159,8 +170,9 @@ class MqttSink:
                 log.info("MQTT verbunden mit %s:%s", host, port)
                 client.publish(self.status_topic, "online", retain=True)
                 # command topics: bms/+/control/{cfet,dfet,poweroff}/set
+                # command topics: bms/<name>/pack<id>/control/{cfet,dfet,poweroff}/set
                 for act in ("cfet", "dfet", "poweroff"):
-                    client.subscribe(f"{self.base}/+/control/{act}/set")
+                    client.subscribe(f"{self.base}/+/+/control/{act}/set")
             else:
                 self.connected = False
                 log.error("MQTT-Verbindung abgelehnt (Code %s) – Login/Port prüfen", code)
@@ -170,10 +182,11 @@ class MqttSink:
             log.warning("MQTT getrennt – versuche erneut zu verbinden…")
 
         def on_message(client, userdata, msg):
-            # topic: bms/pack1/control/cfet/set -> pack_key=pack1, action=cfet
+            # topic: bms/<name>/pack<id>/control/cfet/set -> key="<name>/pack<id>"
             try:
                 parts = msg.topic.split("/")
-                pack_key, action = parts[-4], parts[-2]
+                pack_key = parts[-5] + "/" + parts[-4]
+                action = parts[-2]
                 raw = msg.payload.decode().strip().lower()
                 value = raw in ("1", "true", "on", "yes")
                 if self._cmd_cb:
@@ -193,7 +206,7 @@ class MqttSink:
 
     def write(self, r: AnalogReading) -> None:
         d = reading_to_dict(r)
-        prefix = f"{self.base}/pack{r.address}"
+        prefix = f"{self.base}/{r.pack_key or ('pack%d' % r.address)}"
         try:
             for key in ("voltage_v", "current_a", "soc", "soh",
                         "remain_ah", "full_ah", "cycles",
@@ -207,6 +220,14 @@ class MqttSink:
                     k = f"v{n:02d}"
                     if k in d:
                         self.client.publish(f"{prefix}/cells/{n:02d}", d[k], retain=True)
+            # Balancing: Maske + Liste aktiver Zellen
+            active = [str(i + 1) for i in range(16) if (r.balance_mask >> i) & 1]
+            self.client.publish(f"{prefix}/balance_mask", d["balance_mask"], retain=True)
+            self.client.publish(f"{prefix}/balancing", ",".join(active), retain=True)
+            # Alarme / Schutz
+            self.client.publish(f"{prefix}/alarm", d["alarm"], retain=True)
+            self.client.publish(f"{prefix}/warnings", d["warnings"], retain=True)
+            self.client.publish(f"{prefix}/protections", d["protections"], retain=True)
             if self.publish_state_json:
                 self.client.publish(f"{prefix}/state", json.dumps(d), retain=True)
         except Exception as e:  # noqa: BLE001  (paho raises various)

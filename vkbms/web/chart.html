@@ -25,8 +25,10 @@
   .dot{width:9px;height:9px;border-radius:50%;background:var(--dim)}
   .dot.live{background:var(--charge);box-shadow:0 0 10px 1px #46d6a060}
   .dot.stale{background:var(--discharge)} .dot.down{background:var(--alarm)}
-  main{max-width:1280px;margin:18px auto;padding:0 18px}
-  .bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+  main{max-width:1900px;margin:18px auto;padding:0 18px}
+  .bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+  #bms{width:120px;flex:none}
+  #range{flex-wrap:nowrap}
   select,button{font:12.5px var(--mono);background:var(--panel2);color:var(--text);
     border:1px solid var(--line);border-radius:7px;padding:7px 11px;cursor:pointer}
   button.seg.active{background:var(--panel);color:var(--charge);border-color:#46d6a055}
@@ -38,11 +40,11 @@
     border:1px solid var(--line);border-radius:7px;padding:6px 9px}
   /* eigene, kompakte Legende */
   #legtime{font:11px var(--mono);color:var(--charge);margin-top:12px;height:14px}
-  .legend{display:flex;flex-wrap:wrap;gap:5px 16px;margin-top:6px}
-  .lg{display:inline-flex;align-items:center;gap:6px;cursor:pointer;user-select:none;padding:2px 0}
+  .legend{display:flex;flex-wrap:wrap;gap:5px 14px;margin-top:6px}
+  .lg{display:inline-flex;align-items:center;gap:5px;cursor:pointer;user-select:none;padding:2px 0}
   .lg .box{width:11px;height:11px;border-radius:3px;border:1.5px solid var(--c);background:var(--c);flex:none}
   .lg .lab{color:var(--muted);font:11px var(--mono)}
-  .lg .val{min-width:46px;text-align:right;font:11px var(--mono);font-variant-numeric:tabular-nums;color:var(--text)}
+  .lg .val{min-width:38px;text-align:right;font:11px var(--mono);font-variant-numeric:tabular-nums;color:var(--text)}
   .lg.off{opacity:.4}
   .lg.off .box{background:transparent}
   /* sichtbarer Zoom-Auswahlbereich */
@@ -93,10 +95,13 @@ const CELLS=[...Array(16)].map((_,i)=>"v"+String(i+1).padStart(2,"0"));
 let chart=null, live=0, timer=null, source="", zoomed=false;
 const COLORS=[]; const LABELS=[]; const DEC=[];   // per series (1..18)
 
-function cellColor(i){ return `hsl(${200-(i*11)},55%,55%)`; }
+const CELL_PALETTE=["#e6194b","#3cb44b","#4363d8","#f58231","#911eb4","#42d4f4",
+  "#f032e6","#bfef45","#fabed4","#469990","#dcbeff","#9a6324","#fffac8","#aaffc3",
+  "#ffd8b1","#a9a9f5"];
+function cellColor(i){ return CELL_PALETTE[i % CELL_PALETTE.length]; }
 
 function cWidth(){ const el=document.getElementById("chart");
-  return Math.max(320, (el&&el.clientWidth)? el.clientWidth : Math.min(1240,window.innerWidth-60)); }
+  return Math.max(320, (el&&el.clientWidth)? el.clientWidth : (window.innerWidth-60)); }
 
 function makeChart(){
   const series=[{}];

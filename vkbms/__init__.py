@@ -4,4 +4,4 @@ Entwicklung in Zusammenarbeit: das Coding übernimmt Claude (Anthropic),
 die Funktionen werden gemeinsam mit Gesiima erarbeitet (Anforderungen,
 Reverse-Engineering-Richtung, Tests und Korrekturen von Gesiima).
 """
-__version__ = "0.8.1"
+__version__ = "0.9.0"

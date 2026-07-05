@@ -67,7 +67,7 @@ def _background_loop(cfg: dict, stop: threading.Event) -> None:
     def on_reading(analog, status):
         d = reading_to_dict(analog)
         d["alarm"] = bool(status and status.any_alarm)
-        key = f"pack{analog.address}"
+        key = analog.pack_key
         mos = _engine.mos.get(key, {})
         d["cfet"] = mos.get("cfet")
         d["dfet"] = mos.get("dfet")
@@ -158,7 +158,7 @@ def _save_config(new: dict) -> None:
 # ---------------------------------------------------------------- flask app
 def create_app(cfg: dict):
     try:
-        from flask import Flask, jsonify, request
+        from flask import Flask, jsonify, request, send_file
     except ImportError:
         raise SystemExit("Flask not installed. Run: pip install flask")
 
@@ -208,6 +208,23 @@ def create_app(cfg: dict):
         if _engine is None:
             return jsonify({"ok": False, "error": "engine not ready"}), 503
         return jsonify(_engine.pause_bus(d["bus"], bool(d["paused"])))
+
+    @app.route("/api/db/download")
+    def db_download():
+        sq = (_cfg.get("output", {}) or {}).get("sqlite", {}) or {}
+        path = sq.get("path", "data/bms.db")
+        if not os.path.isabs(path):
+            path = os.path.join(os.getcwd(), path)
+        if not os.path.exists(path):
+            return jsonify({"ok": False, "error": "keine Datenbank gefunden"}), 404
+        # WAL in die Hauptdatei schreiben, damit der Download vollständig ist
+        try:
+            import sqlite3
+            c = sqlite3.connect(path); c.execute("PRAGMA wal_checkpoint(TRUNCATE)"); c.close()
+        except Exception:  # noqa: BLE001
+            pass
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        return send_file(path, as_attachment=True, download_name=f"bms_{ts}.db")
 
     @app.route("/api/history")
     def history():
