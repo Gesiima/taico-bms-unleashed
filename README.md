@@ -16,11 +16,14 @@ zurückentwickelt; Details in `VKING_BMS_Protokoll_Spezifikation.md`.
 - Live-Karten je Pack: Modus (Laden/Entladen/Ruhe), SOC/SOH, Spannung, Strom,
   Rest-/Vollkapazität, Zyklen, 6 Temperaturen, alle 16 Zellspannungen als Balken
   mit Min/Max- und Δ-Anzeige.
-- **Master-Sub-Packs gruppiert**: mehrere Adressen auf einer Leitung werden unter
-  einer Bus-Überschrift zusammengefasst.
+- **Master-Sub-Packs**: mehrere Adressen auf einer Leitung; Titel zweizeilig
+  (Bus-Name + „Pack i/n"), Pack-Karten flach untereinander.
 - **Balancing-Visualisierung**: aktuell balancierende Zellen werden markiert.
-- **Warn-/Schutz-Badges** je Pack (Zelle/Pack Überspannung, Zelle-Überspannung-Schutz).
+- **Warn-/Schutz-Badges** je Pack (Zelle/Pack Überspannung, Zelle-Überspannung-Schutz),
+  in eigener Zeile, ohne das Layout zu verschieben.
 - **Zell-Alarm** ab konfigurierbarem Schwellwert (`cell_alert_mv`).
+- **Zellbalken-Maßstab umschaltbar** (fest ↔ relativ): feste Absolutskala
+  (`cell_scale_min_mv`/`cell_scale_max_mv`) oder relativ um min/max herum.
 - **MOS-Steuerung**: CFET/DFET schalten und Power Off — mit Bestätigungsdialog und
   Rücklese-Prüfung (bis ~2 s).
 - **Pause pro Bus**: gibt die Verbindung zur Laufzeit frei (z. B. um kurzzeitig die
@@ -28,20 +31,23 @@ zurückentwickelt; Details in `VKING_BMS_Protokoll_Spezifikation.md`.
 
 **Verlauf (Chart)**
 - uPlot-Diagramm: Zellspannungen (linke mV-Achse), Pack-Spannung und Strom je eigene
-  rechte Achse (unabhängige Skalen, Werte mit Einheit).
+  rechte Achse (unabhängige Skalen, Werte mit Einheit) sowie **SOC** (feste Skala 0–100,
+  ohne sichtbare Achse).
 - **Verlauf** (frei wählbarer Zeitraum) oder **Live** (5/10/30/60 min, 2 h, 6 h).
 - Zoom per Ziehen mit sichtbarem Auswahlbereich + Zeitspanne; im Live-Modus bleibt der
-  Zoom erhalten.
-- Kompakte Legende mit Ein-/Ausblenden je Serie (gefülltes Kästchen = aktiv) und
-  Werten, die dem Cursor folgen (inkl. Cursor-Zeit).
+  Zoom erhalten. **Diagrammhöhe ziehbar** (Rand unten), Höhe pro Sitzung gemerkt.
+- Kompakte Legende mit Ein-/Ausblenden je Serie (gefülltes Kästchen = aktiv), Werten,
+  die dem Cursor folgen (inkl. Cursor-Zeit), und **Hover-Highlight** (überfahrene Linie
+  hervorgehoben, Rest gedimmt).
+- Kontrastreiche 16-Farben-Palette für die Zellen; Diagrammbreite folgt dem Browserfenster.
 - Verlustfreies Downsampling für große Zeiträume; SQLite-Index für schnelle Abfragen.
 
 **Einstellungen**
-- Alle Konfigurationswerte editierbar (Intervalle, Web, Alert-Schwelle, MQTT, Busse).
+- Alle Konfigurationswerte editierbar (Intervalle, Web, Alert-/Skalen-Schwellen, MQTT, Busse).
 - **Busse hinzufügen/entfernen**, **Aktiv-Schalter pro Bus** (persistent), Umschaltung
   **TCP ↔ Serial** mit den jeweils passenden Feldern.
-- Passwort maskiert, „Speichern & Neustarten" und ein jederzeit sichtbarer
-  „Dienst neu starten"-Button.
+- Passwort maskiert, „Speichern & Neustarten", jederzeit sichtbarer „Dienst neu starten"-
+  Button und **Datenbank-Download**.
 
 ## Installation
 
@@ -95,21 +101,29 @@ Beenden mit Ctrl-C. Für Dauerbetrieb auf einem Server siehe `deploy/README-serv
 
 ## MQTT-Topics
 
+Pro Pack wird eindeutig je Bus adressiert: `bms/<name>/pack<id>/…` (`<name>` =
+Bus-Name aus der Config, kleingeschrieben/ohne Leerzeichen, z. B. `bms1`). Damit ist
+„BMS 1, Adresse 2" klar von „BMS 2" getrennt.
+
 - `bms/status` → `online` / `offline` (Gesamt-Tool, via Last-Will)
-- `bms/packX/online` → `true` / `false` (antwortet das BMS? 3-Fehlversuch-Toleranz)
-- `bms/packX/voltage_v`, `current_a`, `soc`, `soh`, `remain_ah`, `full_ah`, `cycles`,
-  `min_mv`, `max_mv`, `delta_mv`
-- `bms/packX/cells/01` … `cells/16` (Einzelzellen, abschaltbar via `publish_cells`)
-- `bms/packX/temp/cell_t1` … `temp/mos_t`
-- `bms/packX/control/cfet`, `control/dfet` → aktueller FET-Status (`true`/`false`)
-- Befehle: `bms/packX/control/cfet/set`, `control/dfet/set`, `control/poweroff/set`
-- `bms/packX/state` → Gesamt-JSON (nur wenn `publish_state_json: true`)
+- `bms/<name>/pack<id>/online` → `true` / `false` (antwortet das BMS? 3-Fehlversuch-Toleranz;
+  deaktivierte/pausierte Busse werden `false`)
+- `bms/<name>/pack<id>/voltage_v`, `current_a`, `soc`, `soh`, `remain_ah`, `full_ah`,
+  `cycles`, `min_mv`, `max_mv`, `delta_mv`
+- `bms/<name>/pack<id>/cells/01` … `cells/16` (Einzelzellen, abschaltbar via `publish_cells`)
+- `bms/<name>/pack<id>/temp/cell_t1` … `temp/mos_t`
+- `bms/<name>/pack<id>/balance_mask` (16-Bit) und `…/balancing` (Liste aktiver Zellen)
+- `bms/<name>/pack<id>/alarm`, `…/warnings`, `…/protections`
+- `bms/<name>/pack<id>/control/cfet`, `control/dfet` → aktueller FET-Status (`true`/`false`)
+- Befehle: `bms/<name>/pack<id>/control/cfet/set`, `control/dfet/set`, `control/poweroff/set`
+- `bms/<name>/pack<id>/state` → Gesamt-JSON (nur wenn `publish_state_json: true`)
 
 ## JSON-API (Web)
 
 `GET /api/state` (Live-Stand), `GET /api/history` (Verlauf, downsampled),
 `POST /api/mos` (CFET/DFET schalten), `POST /api/poweroff`, `POST /api/pause`
-(Bus pausieren/fortsetzen), `GET/POST /api/config`, `POST /api/restart`.
+(Bus pausieren/fortsetzen), `GET /api/db/download` (SQLite herunterladen),
+`GET/POST /api/config`, `POST /api/restart`.
 
 ## Projektstruktur
 
@@ -174,7 +188,7 @@ Steuerung unter `control/` (CFET/DFET), Temperaturen, Kennwerte und der Online-S
 
 ## Stand & Roadmap
 
-Aktuelle Version: **v0.8.1**. Änderungen je Release in `CHANGELOG.md`, geplante Punkte
+Aktuelle Version: **v0.11.0**. Änderungen je Release in `CHANGELOG.md`, geplante Punkte
 in `ROADMAP.md`.
 
 ## Mitwirkung / Attribution
