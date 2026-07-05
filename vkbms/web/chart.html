@@ -41,6 +41,10 @@
   /* eigene, kompakte Legende */
   #legtime{font:11px var(--mono);color:var(--charge);margin-top:12px;height:14px}
   .legend{display:flex;flex-wrap:wrap;gap:5px 14px;margin-top:6px}
+  #chartdrag{margin-top:6px;text-align:center;font:11px var(--mono);letter-spacing:.15em;
+    color:var(--dim);border:1px solid var(--line);border-radius:7px;padding:5px;cursor:ns-resize;
+    user-select:none;-webkit-user-select:none;touch-action:none}
+  #chartdrag:hover{color:var(--charge);border-color:#46d6a055;background:var(--panel2)}
   .lg{display:inline-flex;align-items:center;gap:5px;cursor:pointer;user-select:none;padding:2px 0}
   .lg .box{width:11px;height:11px;border-radius:3px;border:1.5px solid var(--c);background:var(--c);flex:none}
   .lg .lab{color:var(--muted);font:11px var(--mono)}
@@ -84,12 +88,13 @@
     <span id="sel"></span>
   </div>
   <div class="card">
-    <div id="chartwrap" style="resize:vertical;overflow:hidden;height:470px;min-height:260px">
+    <div id="chartwrap" style="overflow:hidden;height:470px;min-height:220px">
       <div id="chart"></div>
     </div>
+    <div id="chartdrag" title="Diagrammhöhe ziehen">≡ Höhe ziehen</div>
     <div id="legtime"></div>
     <div id="legend" class="legend"></div>
-    <div class="hint">Ziehen = zoomen · Doppelklick oder „Zoom reset" = Vollansicht · Höhe: unten rechts am Rand ziehen · Zellen links (mV), Spannung/Strom rechts, SOC 0–100 (ohne Achse).</div>
+    <div class="hint">Ziehen = zoomen · Doppelklick oder „Zoom reset" = Vollansicht · Höhe über die Leiste „Höhe ziehen" unter dem Chart anpassen · Zellen links (mV), Spannung/Strom rechts, SOC 0–100 (ohne Achse).</div>
   </div>
 </main>
 <script src="/vendor/uPlot.iife.min.js"></script>
@@ -155,6 +160,18 @@ function makeChart(){
   const relayout=()=>{ if(chart) chart.setSize({width:cWidth(),height:chartHeight()}); };
   if(window.ResizeObserver){
     new ResizeObserver(()=>{ sessionStorage.setItem("chartHeight",wrap.clientHeight); relayout(); }).observe(wrap);
+  }
+  // sichtbare Ziehleiste für die Höhe (Maus + Touch)
+  const drag=document.getElementById("chartdrag");
+  if(drag){
+    let sy=0, sh=0, dragging=false;
+    const move=e=>{ if(!dragging) return;
+      const y=(e.touches?e.touches[0].clientY:e.clientY);
+      const h=Math.max(220,Math.min(1400, sh+(y-sy)));
+      wrap.style.height=h+"px"; sessionStorage.setItem("chartHeight",h); relayout(); e.preventDefault(); };
+    const up=()=>{ dragging=false; document.removeEventListener("pointermove",move); document.removeEventListener("pointerup",up); };
+    drag.addEventListener("pointerdown",e=>{ dragging=true; sy=e.clientY; sh=wrap.clientHeight;
+      document.addEventListener("pointermove",move); document.addEventListener("pointerup",up); e.preventDefault(); });
   }
   window.addEventListener("resize",()=>{ clearTimeout(rt); rt=setTimeout(relayout,150); });
 }

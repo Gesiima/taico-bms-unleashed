@@ -2,6 +2,12 @@
 
 Format: neueste Version oben. Versionierung: MAJOR.MINOR.PATCH.
 
+## [0.11.1] — 2026-07-05
+### Geändert
+- Diagrammhöhe: das versteckte Resize-Eck ersetzt durch eine sichtbare Leiste
+  „≡ Höhe ziehen" unter dem Chart (Maus + Touch, ns-resize), Höhe weiterhin pro
+  Sitzung gemerkt.
+
 ## [0.11.0] — 2026-07-05
 ### Verlauf
 - **SOC-Linie** im Diagramm (weiß, Linienstärke wie Spannung/Strom, feste Skala 0–100
