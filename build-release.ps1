@@ -1,22 +1,35 @@
 # ================================
 #  Taico BMS unleashed Release Builder
 # ================================
+# Version wird automatisch aus vkbms/__init__.py gelesen.
+# Optional ueberschreiben:  .\build-release.ps1 -Version 0.11.1
 
-Write-Host "Enter release version (e.g. 0.8.0):"
-$version = Read-Host
+param([string]$Version)
 
-if (-not $version) {
-    Write-Host "No version entered. Aborting."
+$initFile = "vkbms/__init__.py"
+
+if (-not $Version) {
+    if (-not (Test-Path $initFile)) {
+        Write-Host "ERROR: $initFile nicht gefunden - Version kann nicht ermittelt werden."
+        exit 1
+    }
+    $content = Get-Content $initFile -Raw
+    if ($content -match '__version__\s*=\s*["'']([0-9]+\.[0-9]+\.[0-9]+)["'']') {
+        $Version = $Matches[1]
+        Write-Host "Version aus $initFile erkannt: v$Version"
+    } else {
+        Write-Host "ERROR: __version__ in $initFile nicht gefunden."
+        exit 1
+    }
+}
+
+# Format pruefen: X.Y.Z
+if ($Version -notmatch '^\d+\.\d+\.\d+$') {
+    Write-Host "Ungueltiges Versionsformat. Erwartet X.Y.Z (z. B. 0.11.1)."
     exit 1
 }
 
-# Validate version format: must be X.Y.Z
-if ($version -notmatch '^\d+\.\d+\.\d+$') {
-    Write-Host "Invalid version format. Use X.Y.Z (e.g. 0.8.0)."
-    exit 1
-}
-
-Write-Host "Building release v$version ..."
+Write-Host "Building release v$Version ..."
 $manifest = "release.manifest"
 
 if (-not (Test-Path $manifest)) {
@@ -24,9 +37,9 @@ if (-not (Test-Path $manifest)) {
     exit 1
 }
 
-$files = Get-Content $manifest
+$files = Get-Content $manifest | Where-Object { $_.Trim() -ne "" }
 
-# Check if all files exist
+# Pruefen, ob alle Eintraege existieren
 foreach ($item in $files) {
     if (-not (Test-Path $item)) {
         Write-Host "ERROR: File or folder missing: $item"
@@ -34,7 +47,7 @@ foreach ($item in $files) {
     }
 }
 
-$zipName = "taico-bms-unleashed-$version.zip"
+$zipName = "taico-bms-unleashed-$Version.zip"
 
 Compress-Archive -Path $files -DestinationPath $zipName -Force
 
