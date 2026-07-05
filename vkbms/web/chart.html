@@ -83,10 +83,13 @@
     <button id="reset" title="Zoom zurücksetzen">Zoom reset</button>
     <span id="sel"></span>
   </div>
-  <div class="card"><div id="chart"></div>
+  <div class="card">
+    <div id="chartwrap" style="resize:vertical;overflow:hidden;height:470px;min-height:260px">
+      <div id="chart"></div>
+    </div>
     <div id="legtime"></div>
     <div id="legend" class="legend"></div>
-    <div class="hint">Ziehen = zoomen · Doppelklick oder „Zoom reset" = Vollansicht · Zellen links (mV), Spannung &amp; Strom je eigene Achse rechts.</div>
+    <div class="hint">Ziehen = zoomen · Doppelklick oder „Zoom reset" = Vollansicht · Höhe: unten rechts am Rand ziehen · Zellen links (mV), Spannung/Strom rechts, SOC 0–100 (ohne Achse).</div>
   </div>
 </main>
 <script src="/vendor/uPlot.iife.min.js"></script>
@@ -95,9 +98,9 @@ const CELLS=[...Array(16)].map((_,i)=>"v"+String(i+1).padStart(2,"0"));
 let chart=null, live=0, timer=null, source="", zoomed=false;
 const COLORS=[]; const LABELS=[]; const DEC=[];   // per series (1..18)
 
-const CELL_PALETTE=["#e6194b","#3cb44b","#4363d8","#f58231","#911eb4","#42d4f4",
-  "#f032e6","#bfef45","#fabed4","#469990","#dcbeff","#9a6324","#fffac8","#aaffc3",
-  "#ffd8b1","#a9a9f5"];
+const CELL_PALETTE=["#f25f5f","#ed7126","#f2cd5f","#d4ed26","#a8f25f","#3fed26",
+  "#5ff283","#26eda3","#5ff2f2","#26a3ed","#7b99f4","#715ff2","#b87bf4","#d426ed",
+  "#f25fcd","#ed2671"];
 function cellColor(i){ return CELL_PALETTE[i % CELL_PALETTE.length]; }
 
 function cWidth(){ const el=document.getElementById("chart");
@@ -111,9 +114,11 @@ function makeChart(){
   COLORS.push("#46d6a0"); LABELS.push("Spannung"); DEC.push(2);
   series.push({label:"Strom A",scale:"a",stroke:"#f4a648",width:2,points:{show:false}});
   COLORS.push("#f4a648"); LABELS.push("Strom"); DEC.push(2);
+  series.push({label:"SOC %",scale:"soc",stroke:"#ffffff",width:2,points:{show:false}});
+  COLORS.push("#ffffff"); LABELS.push("SOC"); DEC.push(0);
   const opts={
-    width: cWidth(), height:470,
-    scales:{x:{time:true}, mv:{}, v:{}, a:{}},   // drei unabhängige Y-Skalen
+    width: cWidth(), height: chartHeight(),
+    scales:{x:{time:true}, mv:{}, v:{}, a:{}, soc:{range:[0,100]}},   // SOC feste Skala, ohne Achse
     axes:[
       {stroke:"#7e9893",grid:{stroke:"#1c2c2a"},ticks:{stroke:"#1c2c2a"}},
       {scale:"mv",stroke:"#7e9893",grid:{stroke:"#1c2c2a"},label:"Zellspannung (mV)",
@@ -123,7 +128,7 @@ function makeChart(){
       {scale:"a",side:1,stroke:"#caa46a",grid:{show:false},size:58,
        values:(u,s)=>s.map(v=>(v%1?v.toFixed(1):v.toFixed(0)).replace(".",",")+" A")}
     ],
-    cursor:{drag:{x:true,y:true,uni:20}},
+    cursor:{drag:{x:true,y:true,uni:20}, focus:{alpha:0.22}},
     legend:{show:false},               // eigene Legende unten
     hooks:{
       setSelect:[u=>{
@@ -142,11 +147,18 @@ function makeChart(){
   chart=new uPlot(opts, [[]].concat(series.slice(1).map(()=>[])), document.getElementById("chart"));
   document.getElementById("chart").addEventListener("dblclick",resetZoom);
   buildLegend();
+  // ziehbare Höhe: Wrapper-Höhe aus Session wiederherstellen + auf Änderungen reagieren
+  const wrap=document.getElementById("chartwrap");
+  const savedH=sessionStorage.getItem("chartHeight");
+  if(savedH){ wrap.style.height=savedH+"px"; }
   let rt=null;
-  window.addEventListener("resize",()=>{ clearTimeout(rt); rt=setTimeout(()=>{
-    if(chart) chart.setSize({width:cWidth(),height:470});
-  },150); });
+  const relayout=()=>{ if(chart) chart.setSize({width:cWidth(),height:chartHeight()}); };
+  if(window.ResizeObserver){
+    new ResizeObserver(()=>{ sessionStorage.setItem("chartHeight",wrap.clientHeight); relayout(); }).observe(wrap);
+  }
+  window.addEventListener("resize",()=>{ clearTimeout(rt); rt=setTimeout(relayout,150); });
 }
+function chartHeight(){ const w=document.getElementById("chartwrap"); return Math.max(220,(w&&w.clientHeight)||470); }
 
 function buildLegend(){
   const box=document.getElementById("legend"); box.innerHTML="";
@@ -156,6 +168,8 @@ function buildLegend(){
     el.style.setProperty("--c",COLORS[i]);
     el.innerHTML=`<span class="box"></span><span class="lab">${LABELS[i]}</span><span class="val">–</span>`;
     el.onclick=()=>{ const sh=!chart.series[si].show; chart.setSeries(si,{show:sh}); el.classList.toggle("off",!sh); };
+    el.onmouseenter=()=>{ if(chart) chart.setSeries(si,{focus:true}); };
+    el.onmouseleave=()=>{ if(chart) chart.setSeries(null,{focus:false}); };
     box.appendChild(el);
   }
 }
@@ -191,7 +205,7 @@ async function loadData(){
     const xs=(d.time||[]).map(s=>Date.parse(s)/1000);
     const data=[xs];
     CELLS.forEach(k=>data.push(d[k]||[]));
-    data.push(d.voltage_v||[]); data.push(d.current_a||[]);
+    data.push(d.voltage_v||[]); data.push(d.current_a||[]); data.push(d.soc||[]);
     // Zoom im Live-Modus bewahren
     let keep=null;
     if(live>0 && zoomed && chart){ const sc=chart.scales; keep={x:[sc.x.min,sc.x.max],mv:[sc.mv.min,sc.mv.max],v:[sc.v.min,sc.v.max],a:[sc.a.min,sc.a.max]}; }

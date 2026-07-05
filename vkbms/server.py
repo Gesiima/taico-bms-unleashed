@@ -103,7 +103,7 @@ def _query_history(source: str, since_iso: str, until_iso: str | None,
     if not path or not os.path.exists(path):
         return {"time": []}
     con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
-    cols = "time,voltage_v,current_a," + ",".join(CELL_KEYS)
+    cols = "time,voltage_v,current_a,soc," + ",".join(CELL_KEYS)
     q = f"SELECT {cols} FROM readings WHERE source=? AND time>=?"
     args = [source, since_iso]
     if until_iso:
@@ -115,7 +115,7 @@ def _query_history(source: str, since_iso: str, until_iso: str | None,
         return {"time": []}
     # downsample by bucket-averaging to at most max_points
     step = max(1, len(rows) // max_points)
-    out = {"time": [], "voltage_v": [], "current_a": []}
+    out = {"time": [], "voltage_v": [], "current_a": [], "soc": []}
     for k in CELL_KEYS:
         out[k] = []
     for i in range(0, len(rows), step):
@@ -125,8 +125,9 @@ def _query_history(source: str, since_iso: str, until_iso: str | None,
         n = len(bucket)
         out["voltage_v"].append(round(sum(r[1] for r in bucket) / n, 2))
         out["current_a"].append(round(sum(r[2] for r in bucket) / n, 2))
+        out["soc"].append(round(sum((r[3] or 0) for r in bucket) / n))
         for j, k in enumerate(CELL_KEYS):
-            out[k].append(round(sum(r[3 + j] for r in bucket) / n))
+            out[k].append(round(sum(r[4 + j] for r in bucket) / n))
     return out
 
 
