@@ -7,6 +7,8 @@ mqtt_interval: 5          # MQTT-Publish-Takt          (>= poll_interval)
 db_interval: 10           # Schreiben in SQLite/CSV    (>= poll_interval)
 offline_after: 3          # nach N Fehlversuchen gilt ein BMS als offline
 cell_alert_mv: 3600       # Zellen >= diesem Wert (mV) werden hervorgehoben (0 = aus)
+cell_scale_min_mv: 2500   # feste Zellbalken-Skala: Untergrenze (mV)
+cell_scale_max_mv: 3650   # feste Zellbalken-Skala: Obergrenze (mV)
 log_level: INFO           # DEBUG | INFO | WARNING | ERROR
 
 # Web dashboard (run_web.py)

@@ -2,6 +2,14 @@
 
 Format: neueste Version oben. Versionierung: MAJOR.MINOR.PATCH.
 
+## [0.10.0] — 2026-07-05
+### Hinzugefügt
+- **Zellbalken-Maßstab umschaltbar** (Umschalter „Fest / Relativ" im Dashboard-Header,
+  merkt sich die Wahl pro Sitzung). **Default: feste Skala.**
+  - Feste Skala: Balkenhöhe = echte Zellspannung im Bereich `cell_scale_min_mv` …
+    `cell_scale_max_mv` (Default 2500–3650 mV, per Config und Einstellungs-Seite anpassbar).
+  - Relative Skala: wie bisher (min − 15 mV … max + 15 mV), betont kleine Unterschiede.
+
 ## [0.9.1] — 2026-07-05
 ### Behoben
 - Poller-Regression aus 0.9.0: `status` wurde vor der Zuweisung referenziert

@@ -93,6 +93,8 @@ function render(){
     ${row("db_interval (s)",field("db_interval",{type:"number"}))}
     ${row("offline_after (Zyklen)",field("offline_after",{type:"number"}))}
     ${row("cell_alert_mv (Zell-Alarm)",field("cell_alert_mv",{type:"number"}))}
+    ${row("cell_scale_min_mv (feste Skala)",field("cell_scale_min_mv",{type:"number"}))}
+    ${row("cell_scale_max_mv (feste Skala)",field("cell_scale_max_mv",{type:"number"}))}
     ${row("log_level",field("log_level",{type:"select",options:["DEBUG","INFO","WARNING","ERROR"]}))}
   </div>`;
 

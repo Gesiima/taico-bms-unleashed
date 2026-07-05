@@ -199,6 +199,8 @@ def create_app(cfg: dict):
                 "updated": _state["updated"], "connected": _state["connected"],
                 "error": _state["error"], "version": __version__,
                 "cell_alert_mv": int(_cfg.get("cell_alert_mv", 0)),
+                "cell_scale_min_mv": int(_cfg.get("cell_scale_min_mv", 2500)),
+                "cell_scale_max_mv": int(_cfg.get("cell_scale_max_mv", 3650)),
                 "buses": buses,
             })
 

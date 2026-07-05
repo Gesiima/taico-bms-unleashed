@@ -24,6 +24,9 @@
   nav a{font-size:12.5px;letter-spacing:.06em;padding:6px 12px;border-radius:6px;color:var(--muted);text-decoration:none}
   nav a.active{background:var(--panel);color:var(--text)}
   .status{margin-left:auto;display:flex;align-items:center;gap:10px;font:12.5px/1 var(--mono);color:var(--muted)}
+  .scaletgl{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+  .scaletgl button{font:11px var(--mono);background:var(--panel2);color:var(--muted);border:none;padding:5px 10px;cursor:pointer}
+  .scaletgl button.on{background:var(--panel);color:var(--charge)}
   .dot{width:9px;height:9px;border-radius:50%;background:var(--dim)}
   .dot.live{background:var(--charge);box-shadow:0 0 10px 1px #46d6a060}
   .dot.stale{background:var(--discharge)} .dot.down{background:var(--alarm)}
@@ -116,7 +119,11 @@
     <a href="/chart">Verlauf</a>
     <a href="/settings">Einstellungen</a>
   </nav>
-  <div class="status"><span id="dot" class="dot"></span><span id="stext">verbinde…</span><span class="ver">{{VERSION}}</span></div>
+  <div class="status">
+    <span class="scaletgl" title="Zellbalken-Maßstab">
+      <button id="scFixed" class="on">Fest</button><button id="scRel">Relativ</button>
+    </span>
+    <span id="dot" class="dot"></span><span id="stext">verbinde…</span><span class="ver">{{VERSION}}</span></div>
 </header>
 
 <main id="main"><div class="empty" id="empty">Warte auf erste Messwerte…</div></main>
@@ -193,6 +200,7 @@ function buildCard(p){
 }
 
 function updateCard(card,p,meta){
+  card._p=p; card._meta=meta;
   card.classList.toggle("alarm",!!p.alarm);
   const [mc,ml]=mode(p.current_a);
   const mb=card.querySelector(".badge.mode"); mb.textContent=ml; mb.className="badge mode "+mc;
@@ -207,14 +215,16 @@ function updateCard(card,p,meta){
   // cells
   const cells=[]; for(let i=1;i<=16;i++){const k="v"+String(i).padStart(2,"0"); if(p[k]!=null) cells.push([i,p[k]]);}
   const mvs=cells.map(c=>c[1]); const mn=Math.min(...mvs), mx=Math.max(...mvs);
-  const lo=mn-15, hi=mx+15, span=Math.max(1,hi-lo);
+  let lo,hi;
+  if(SCALE_MODE==="rel"){ lo=mn-15; hi=mx+15; } else { lo=SCALE_MIN; hi=SCALE_MAX; }
+  const span=Math.max(1,hi-lo);
   cells.forEach(([i,mv])=>{
     const el=card.querySelector(`[data-cell="${i}"]`); if(!el) return;
     const bal=p.balance&&p.balance[i-1];
     const crit=CELL_ALERT>0 && mv>=CELL_ALERT;
     el.className="cell"+(mv===mn?" min":"")+(mv===mx?" max":"")+(bal?" bal":"")+(crit?" crit":"");
     el.querySelector(".mv").textContent=mv;
-    el.querySelector(".bar").style.height=(12+Math.round(((mv-lo)/span)*78))+"%";
+    el.querySelector(".bar").style.height=Math.max(2,Math.min(98,12+Math.round(((mv-lo)/span)*78)))+"%";
   });
   card.querySelector("[data-spread]").innerHTML=`min <b>${mn}</b> · max <b>${mx}</b> · Δ <b>${mx-mn}</b> mV`;
   // Warnungen / Schutz — Schutz überdeckt gleichnamige Warnung
@@ -241,6 +251,8 @@ function updateCard(card,p,meta){
 }
 
 const cards={}; let CELL_ALERT=0; let BUSES=[];
+let SCALE_MIN=2500, SCALE_MAX=3650;
+let SCALE_MODE=(sessionStorage.getItem("cellScale")||"fixed");   // Default: feste Skala
 function renderPacks(packs){
   const main=document.getElementById("main"), empty=document.getElementById("empty");
   if(empty) empty.remove();
@@ -298,12 +310,23 @@ async function tick(){
   try{
     const s=await (await fetch("/api/state",{cache:"no-store"})).json();
     CELL_ALERT=s.cell_alert_mv||0; BUSES=s.buses||[];
+    if(s.cell_scale_min_mv!=null) SCALE_MIN=s.cell_scale_min_mv;
+    if(s.cell_scale_max_mv!=null) SCALE_MAX=s.cell_scale_max_mv;
     if(!s.packs||!s.packs.length){ dot.className="dot "+(s.connected?"live":"down"); st.textContent=s.error||"keine Daten"; return; }
     renderPacks(s.packs);
     dot.className="dot "+(s.connected?"live":"stale");
     st.textContent=(s.connected?"live · ":"veraltet · ")+(s.updated?s.updated.replace("T"," "):"");
   }catch(e){ dot.className="dot down"; st.textContent="Server nicht erreichbar"; }
 }
+function applyScaleButtons(){
+  document.getElementById("scFixed").classList.toggle("on",SCALE_MODE!=="rel");
+  document.getElementById("scRel").classList.toggle("on",SCALE_MODE==="rel");
+}
+function setScale(mode){ SCALE_MODE=mode; sessionStorage.setItem("cellScale",mode); applyScaleButtons();
+  Object.values(cards).forEach(c=>{ if(c._p) updateCard(c,c._p,c._meta); }); }
+document.getElementById("scFixed").onclick=()=>setScale("fixed");
+document.getElementById("scRel").onclick=()=>setScale("rel");
+applyScaleButtons();
 tick(); setInterval(tick,1000);
 </script>
 </body>
