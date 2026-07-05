@@ -2,6 +2,13 @@
 
 Format: neueste Version oben. Versionierung: MAJOR.MINOR.PATCH.
 
+## [0.9.1] — 2026-07-05
+### Behoben
+- Poller-Regression aus 0.9.0: `status` wurde vor der Zuweisung referenziert
+  ("local variable 'status' referenced before assignment") — dadurch schlug jeder
+  Bus-Poll fehl und es kamen keine Werte mehr. Warnungen/Schutz werden jetzt korrekt
+  nach dem Status-Read an die Messung gehängt.
+
 ## [0.9.0] — 2026-06-28
 ### ⚠️ Breaking — MQTT-Topics umstrukturiert
 - Packs werden jetzt **eindeutig je Bus** adressiert: `bms/<name>/pack<id>/…`

@@ -100,9 +100,6 @@ def poll_pack(bus: Bus, address: int):
         analog = P.decode_analog(resp)
         analog.source = pack_identity(bus, address)
         analog.pack_key = pack_key(bus, address)
-        if status is not None:
-            analog.warnings = status.warnings
-            analog.protections = status.protections
     except (TransportError, P.ProtocolError, IndexError) as e:
         log.debug("[%s] pack %d analog failed: %s", bus.name, address, e)
         return None
@@ -116,6 +113,9 @@ def poll_pack(bus: Bus, address: int):
                 status = P.decode_status(sresp)
         except (TransportError, P.ProtocolError, IndexError) as e:
             log.debug("[%s] pack %d status failed: %s", bus.name, address, e)
+    if status is not None:
+        analog.warnings = status.warnings
+        analog.protections = status.protections
     return analog, status
 
 
