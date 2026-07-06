@@ -19,6 +19,12 @@ log_file:
   level: DEBUG            # Ebene der Datei (unabhaengig von log_level)
   retention_days: 2       # Anzahl taeglicher Dateien, die behalten werden
 
+# Setzt erhoehtes Logging (globales DEBUG oder pro-Bus DEBUG/Rohframes) nach X Minuten
+# automatisch auf INFO zurueck. Nur zur Laufzeit -- diese Datei wird nicht veraendert.
+debug_auto_reset:
+  enabled: false
+  minutes: 30
+
 # Web dashboard (run_web.py)
 web:
   host: 0.0.0.0           # 0.0.0.0 = auch im Netz erreichbar; 127.0.0.1 = nur lokal

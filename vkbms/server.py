@@ -236,7 +236,56 @@ def create_app(cfg: dict):
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         return send_file(path, as_attachment=True, download_name=f"bms_{ts}.db")
 
-    @app.route("/api/history")
+    def _log_files():
+        """Return (current_path, [all log files incl. rotated backups])."""
+        lf = (_cfg.get("log_file", {}) or {})
+        path = lf.get("path", "data/logs/vkbms.log")
+        if not os.path.isabs(path):
+            path = os.path.join(os.getcwd(), path)
+        import glob as _glob
+        files = sorted(f for f in _glob.glob(path + "*") if os.path.isfile(f))
+        return path, files
+
+    @app.route("/api/log/clear", methods=["POST"])
+    def log_clear():
+        """Delete ALL log files (current + rotated daily backups)."""
+        if not (_cfg.get("log_file", {}) or {}).get("enabled"):
+            return jsonify({"ok": False, "error": "Logdatei ist nicht aktiv"}), 400
+        path, files = _log_files()
+        removed = 0
+        for f in files:
+            try:
+                if os.path.abspath(f) == os.path.abspath(path):
+                    open(f, "w").close()          # truncate the active file (keep handle valid)
+                else:
+                    os.remove(f)                  # delete rotated backups
+                removed += 1
+            except OSError as e:
+                log.warning("log clear: %s (%s)", f, e)
+        return jsonify({"ok": True, "removed": removed})
+
+    @app.route("/api/log/download")
+    def log_download():
+        """Download logs: ?scope=current (active file) or ?scope=all (ZIP of all)."""
+        if not (_cfg.get("log_file", {}) or {}).get("enabled"):
+            return jsonify({"ok": False, "error": "Logdatei ist nicht aktiv"}), 400
+        path, files = _log_files()
+        scope = request.args.get("scope", "current")
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        if scope == "all":
+            import io, zipfile
+            if not files:
+                return jsonify({"ok": False, "error": "keine Logdateien vorhanden"}), 404
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+                for f in files:
+                    z.write(f, arcname=os.path.basename(f))
+            buf.seek(0)
+            return send_file(buf, as_attachment=True, download_name=f"vkbms_logs_{ts}.zip",
+                             mimetype="application/zip")
+        if not os.path.exists(path):
+            return jsonify({"ok": False, "error": "keine Logdatei vorhanden"}), 404
+        return send_file(path, as_attachment=True, download_name=f"vkbms_{ts}.log")
     def history():
         """Downsampled history for a pack: ?minutes= (live) or ?from=&to= (range)."""
         source = request.args.get("source", "")
@@ -256,7 +305,7 @@ def create_app(cfg: dict):
         d = request.get_json(force=True)
         if _engine is None:
             return jsonify({"ok": False, "error": "engine not ready"}), 503
-        res = _engine.set_mos(d["pack"], cfet=d.get("cfet"), dfet=d.get("dfet"))
+        res = _engine.set_mos(d["pack"], cfet=d.get("cfet"), dfet=d.get("dfet"), source="Web")
         return jsonify(res)
 
     @app.route("/api/poweroff", methods=["POST"])
@@ -265,7 +314,7 @@ def create_app(cfg: dict):
         d = request.get_json(force=True)
         if _engine is None:
             return jsonify({"ok": False, "error": "engine not ready"}), 503
-        return jsonify(_engine.power_off(d["pack"]))
+        return jsonify(_engine.power_off(d["pack"], source="Web"))
 
     @app.route("/api/config", methods=["GET", "POST"])
     def config_io():

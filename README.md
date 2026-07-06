@@ -130,7 +130,20 @@ log_file:
 ```
 
 Zusätzlich setzt die systemd-Unit `LogLevelMax=info`, sodass der Dienst ohnehin nichts
-unter INFO ins Journal schreibt. Alles auch über die **Einstellungs-Seite** konfigurierbar.
+unter INFO ins Journal schreibt. Alles auch über die **Einstellungs-Seite** konfigurierbar
+(inkl. `read_status`, Log-Level und Rohframes **pro Bus**).
+
+Auf der Einstellungs-Seite gibt es außerdem **„Log herunterladen – aktuell / alles (ZIP)"**
+und **„Log leeren"** (löscht aktuelle Datei + rotierte Backups). Ein optionaler
+**DEBUG-Auto-Reset** (`debug_auto_reset: {enabled, minutes}`) stellt erhöhtes Logging
+(Konsole-DEBUG bzw. Bus-DEBUG/Rohframes) nach X Minuten automatisch auf INFO zurück –
+nur zur Laufzeit, die `config.yaml` bleibt unverändert. Eine aktive DEBUG-**Logdatei**
+gilt dabei als gewollter Dauerzustand und wird vom Auto-Reset nicht angetastet.
+
+Schaltbefehle werden mit ihrer **Quelle** protokolliert, z. B.
+`MOS … [Quelle: MQTT]` bzw. `[Quelle: Web]`. Nach einem **Power Off** wird das erwartete
+kurzzeitige Offline nicht als Fehler, sondern als „… nach Power Off vorübergehend offline
+(erwartet)" geloggt.
 
 ## MQTT-Topics
 
@@ -153,6 +166,11 @@ Bus-Name aus der Config, kleingeschrieben/ohne Leerzeichen, z. B. `bms1`). Damit
   gewertet, keine Schleife).
 - `bms/<name>/pack<id>/control/poweroff` → schreibbar; `true` löst Power Off aus und
   wird danach automatisch auf `false` zurückgesetzt (Momentschalter).
+
+> Hinweis (ioBroker): Da `poweroff` ein Momentschalter ist (springt nach dem Auslösen
+> sofort zurück auf `false`), wirkt ein Schalter-Widget optisch immer „aus". Das ist
+> korrekt — Power Off ist ein kurzer Auslöser, kein Dauerzustand. Für eine klarere
+> Darstellung den Datenpunkt als **Button** einbinden (Button-Widget bzw. `role: button`).
 - `bms/<name>/pack<id>/state` → Gesamt-JSON (nur wenn `publish_state_json: true`)
 
 > Hinweis: Lehnt das BMS ein Schalten ab (z. B. Last aktiv), springt das Objekt beim
@@ -163,7 +181,8 @@ Bus-Name aus der Config, kleingeschrieben/ohne Leerzeichen, z. B. `bms1`). Damit
 `GET /api/state` (Live-Stand), `GET /api/history` (Verlauf, downsampled),
 `POST /api/mos` (CFET/DFET schalten), `POST /api/poweroff`, `POST /api/pause`
 (Bus pausieren/fortsetzen), `GET /api/db/download` (SQLite herunterladen),
-`GET/POST /api/config`, `POST /api/restart`.
+`POST /api/log/clear` (alle Logdateien löschen), `GET /api/log/download?scope=current|all`
+(aktuelle Datei bzw. alle als ZIP), `GET/POST /api/config`, `POST /api/restart`.
 
 ## FET-Schaltverhalten / BMS-Verriegelung
 
@@ -255,7 +274,7 @@ Steuerung unter `control/` (CFET/DFET), Temperaturen, Kennwerte und der Online-S
 
 ## Stand & Roadmap
 
-Aktuelle Version: **v0.12.1**. Änderungen je Release in `CHANGELOG.md`, geplante Punkte
+Aktuelle Version: **v0.13.0**. Änderungen je Release in `CHANGELOG.md`, geplante Punkte
 in `ROADMAP.md`.
 
 ## Mitwirkung / Attribution

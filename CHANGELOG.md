@@ -2,6 +2,29 @@
 
 Format: neueste Version oben. Versionierung: MAJOR.MINOR.PATCH.
 
+## [0.13.0] — 2026-07-06
+### Hinzugefügt
+- **Einstellungs-Seite vervollständigt**: alle bisher fehlenden `config.yaml`-Optionen
+  editierbar — pro Bus `read_status`, `log_level` (mit „— (global)") und `debug_raw_frames`.
+- **Logdatei-Verwaltung** auf der Einstellungs-Seite: „Log herunterladen – aktuell",
+  „… – alles (ZIP)" und „Log leeren" (löscht aktuelle Datei + rotierte Backups; mit
+  Bestätigung). Neue Routen `POST /api/log/clear`, `GET /api/log/download?scope=current|all`.
+- **DEBUG-Auto-Reset** (`debug_auto_reset: {enabled, minutes}`): setzt erhöhtes Logging
+  (Konsole-DEBUG bzw. Bus-DEBUG/Rohframes) nach X Minuten automatisch auf INFO zurück —
+  nur zur Laufzeit. Eine aktive DEBUG-Logdatei bleibt als gewollter Dauerzustand unberührt.
+- **Befehlsquelle im Log**: MOS- und Power-Off-Meldungen kennzeichnen die Herkunft,
+  `[Quelle: Web]` bzw. `[Quelle: MQTT]`.
+### Geändert
+- **Power-Off-Nachlauf** wird freundlicher geloggt: das erwartete kurzzeitige Offline
+  direkt nach einem Power Off erscheint als Info („… nach Power Off vorübergehend offline
+  (erwartet)" / „… nach Power Off wieder online") statt als WARNING.
+
+## [0.12.2] — 2026-07-06
+### Dokumentation
+- README-Hinweis ergänzt: `poweroff` ist ein Momentschalter (springt nach dem Auslösen
+  zurück auf `false`); in ioBroker daher am besten als Button-Widget (bzw. `role: button`)
+  einbinden statt als Schalter.
+
 ## [0.12.1] — 2026-07-06
 ### Dokumentation
 - Neuer README-Abschnitt „FET-Schaltverhalten / BMS-Verriegelung": CFET = Charge-FET

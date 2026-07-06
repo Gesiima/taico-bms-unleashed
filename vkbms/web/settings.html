@@ -32,6 +32,9 @@
   input,select{font:13px var(--mono);background:var(--panel2);color:var(--text);
     border:1px solid var(--line);border-radius:7px;padding:8px 10px;width:100%}
   input[type=checkbox]{width:auto}
+  .logbtn{font:12px var(--mono);background:var(--panel2);color:var(--charge);border:1px solid #46d6a055;
+    border-radius:8px;padding:8px 14px;cursor:pointer;text-decoration:none;display:inline-block}
+  .logbtn.danger{color:var(--alarm);border-color:#ff5d5d55}
   .bus{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:12px}
   .bus h3{margin:0 0 12px;font:12px var(--mono);color:var(--charge);letter-spacing:.06em}
   .bar{position:fixed;left:0;right:0;bottom:0;background:#12211f;border-top:1px solid var(--line);
@@ -103,7 +106,19 @@ function render(){
     ${row("Pfad",field("log_file.path"))}
     ${row("Ebene",field("log_file.level",{type:"select",options:["DEBUG","INFO","WARNING","ERROR"]}))}
     ${row("Aufbewahrung (Tage)",field("log_file.retention_days",{type:"number"}))}
-  </div>`;
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 2px">
+    <a class="logbtn" href="/api/log/download?scope=current">Log herunterladen – aktuell</a>
+    <a class="logbtn" href="/api/log/download?scope=all">Log herunterladen – alles (ZIP)</a>
+    <button class="logbtn danger" id="logClear" type="button">Log leeren (alles)</button>
+  </div>
+  <div class="note">„Log leeren" löscht die aktuelle Datei und alle rotierten Tages-Backups.</div>`;
+
+  h+=`<h2>DEBUG-Auto-Reset</h2><div class="grid">
+    ${row("aktiv",field("debug_auto_reset.enabled",{type:"checkbox"}))}
+    ${row("Minuten",field("debug_auto_reset.minutes",{type:"number"}))}
+  </div><div class="note">Setzt erhöhtes Logging (DEBUG / Rohframes) nach der angegebenen Zeit
+    automatisch auf INFO zurück – nur zur Laufzeit, die config.yaml bleibt unverändert.</div>`;
 
   h+=`<h2>Web</h2><div class="grid">
     ${row("host",field("web.host"))}
@@ -127,6 +142,9 @@ function render(){
       ${conn}
       ${row("Adressen (z.B. 1, 2)",`<input type="text" data-path="buses.${i}.addresses" data-list="1" value="${(b.addresses||[]).join(", ")}">`)}
       ${row("Timeout (s)",field("buses."+i+".timeout",{type:"number"}))}
+      ${row("Status/Alarm lesen",`<input type="checkbox" data-path="buses.${i}.read_status" ${b.read_status===false?'':'checked'}>`)}
+      ${row("Log-Level (Bus)",`<select data-path="buses.${i}.log_level"><option value=""${!b.log_level?' selected':''}>— (global)</option>${["DEBUG","INFO","WARNING","ERROR"].map(o=>`<option ${o===b.log_level?'selected':''}>${o}</option>`).join("")}</select>`)}
+      ${row("Rohframes (debug_raw_frames)",field("buses."+i+".debug_raw_frames",{type:"checkbox"}))}
     </div></div>`;
   });
   h+=`<button id="addbus" style="font:12.5px var(--mono);background:var(--panel2);color:var(--charge);border:1px solid #46d6a055;border-radius:8px;padding:9px 16px;cursor:pointer">+ Bus hinzufügen</button>`;
@@ -173,6 +191,14 @@ function render(){
   m.querySelectorAll(".rmbus").forEach(btn=>btn.onclick=()=>{
     if(!confirm("Diesen Bus entfernen?")) return;
     CFG.buses.splice(+btn.dataset.i,1); render(); dirty(); });
+  const lc=document.getElementById("logClear");
+  if(lc) lc.onclick=async()=>{
+    if(!confirm("Alle Logdateien (aktuell + rotierte Backups) löschen?")) return;
+    try{
+      const r=await (await fetch("/api/log/clear",{method:"POST"})).json();
+      alert(r.ok ? ("Log geleert ("+r.removed+" Datei(en)).") : ("Fehler: "+(r.error||"unbekannt")));
+    }catch(e){ alert("Server nicht erreichbar."); }
+  };
 }
 
 async function load(){

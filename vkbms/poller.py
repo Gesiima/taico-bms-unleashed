@@ -248,6 +248,52 @@ class Engine:
         self._pack_map = {pack_key(b, a): (b, a) for b in self.buses for a in b.addresses}
         # desired MOS state per pack; cfet/dfet mirror the BMS, cl is tool-tracked
         self.mos = {k: {"cfet": None, "dfet": None, "cl": False} for k in active}
+        # Power-Off-Nachlauf: erwartetes Offline direkt nach einem Power Off nicht
+        # als WARNING, sondern als erwartet loggen (Fenster in Sekunden).
+        self._po_grace = {}           # pack_key -> monotonic deadline
+        self._po_offline = set()      # packs currently offline due to a power off
+        # DEBUG-Auto-Reset (nur Laufzeit): erhoehtes Logging nach X Minuten zuruecksetzen
+        self._debug_timer = None
+        self._schedule_debug_auto_reset(cfg)
+
+    def _debug_active(self) -> bool:
+        """True only if *elevated* logging is on that auto-reset should undo:
+        the console/journal at DEBUG, or a bus explicitly at DEBUG / raw frames.
+        A DEBUG log FILE is the intended persistent state and is NOT counted."""
+        root = logging.getLogger()
+        console_debug = any(
+            isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler)
+            and h.level and h.level <= logging.DEBUG
+            for h in root.handlers)
+        bus_debug = any(
+            b.debug_raw or (b.logger.level and b.logger.level <= logging.DEBUG)
+            for b in self.buses)
+        return console_debug or bus_debug
+
+    def _schedule_debug_auto_reset(self, cfg: dict) -> None:
+        dar = cfg.get("debug_auto_reset", {}) or {}
+        minutes = int(dar.get("minutes", 30))
+        if not dar.get("enabled") or minutes <= 0 or not self._debug_active():
+            return
+        import threading as _t
+        self._debug_timer = _t.Timer(minutes * 60, self._reset_debug, [minutes])
+        self._debug_timer.daemon = True
+        self._debug_timer.start()
+        log.info("DEBUG-Auto-Reset aktiv: setzt erhoehtes Logging nach %d min zurueck", minutes)
+
+    def _reset_debug(self, minutes: int) -> None:
+        """Lower verbose logging back to INFO (runtime only; config unchanged)."""
+        root = logging.getLogger()
+        for h in root.handlers:                       # console handler -> INFO
+            if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler):
+                h.setLevel(logging.INFO)
+        if root.level < logging.INFO and not any(isinstance(h, logging.FileHandler)
+                                                 for h in root.handlers):
+            root.setLevel(logging.INFO)
+        for b in self.buses:                          # per-bus back to INFO / raw off
+            b.debug_raw = False
+            b.logger.setLevel(logging.INFO)
+        log.info("DEBUG automatisch zurueckgesetzt (nach %d min) -> Level INFO", minutes)
 
     def _due(self, now: float) -> dict:
         out = {}
@@ -297,6 +343,7 @@ class Engine:
     def _update_availability(self, readings) -> None:
         """Mark each expected pack online/offline (with miss tolerance), log the
         transition once, and push it to sinks that support it (MQTT)."""
+        now = time.monotonic()
         responded = {a.pack_key for a, _ in readings}
         for key in self._expected:
             if key in responded:
@@ -311,9 +358,18 @@ class Engine:
             if self._online[key] != online:
                 self._online[key] = online
                 if online:
-                    log.info("%s wieder online", key)
+                    if key in self._po_offline:
+                        log.info("%s nach Power Off wieder online", key)
+                        self._po_offline.discard(key)
+                    else:
+                        log.info("%s wieder online", key)
                 else:
-                    log.warning("%s offline (keine Antwort)", key)
+                    if self._po_grace.get(key, 0.0) > now:
+                        # offline is the expected consequence of a recent Power Off
+                        log.info("%s nach Power Off vorübergehend offline (erwartet)", key)
+                        self._po_offline.add(key)
+                    else:
+                        log.warning("%s offline (keine Antwort)", key)
                 for s in self.sinks:
                     if hasattr(s, "set_availability"):
                         s.set_availability(key, online)
@@ -335,9 +391,10 @@ class Engine:
                     s.publish_mos(key, status.cfet_on, status.dfet_on)
 
     def set_mos(self, pack_key: str, cfet: Optional[bool] = None,
-                dfet: Optional[bool] = None) -> dict:
+                dfet: Optional[bool] = None, source: str = "Web") -> dict:
         """Switch CFET/DFET. Sends the FULL desired mask (E2); CL bit is kept
-        from the tracked state. Reads status back to verify."""
+        from the tracked state. Reads status back to verify. `source` (Web/MQTT)
+        is recorded in the log so the command's origin is visible."""
         if pack_key not in self._pack_map:
             return {"ok": False, "error": f"unbekannter Pack {pack_key}"}
         bus, addr = self._pack_map[pack_key]
@@ -377,13 +434,13 @@ class Engine:
         if status:
             st["cfet"], st["dfet"] = status.cfet_on, status.dfet_on
         lg.debug("← MOS Rücklese (Adr %d): CFET=%s DFET=%s", addr, st["cfet"], st["dfet"])
-        log.info("MOS %s -> CFET=%s DFET=%s (gewünscht %s/%s)",
-                 pack_key, st["cfet"], st["dfet"], want_cfet, want_dfet)
+        log.info("MOS %s -> CFET=%s DFET=%s (gewünscht %s/%s) [Quelle: %s]",
+                 pack_key, st["cfet"], st["dfet"], want_cfet, want_dfet, source)
         return {"ok": True, "cfet": st["cfet"], "dfet": st["dfet"],
                 "verified": bool(status and status.cfet_on == want_cfet
                                  and status.dfet_on == want_dfet)}
 
-    def power_off(self, pack_key: str) -> dict:
+    def power_off(self, pack_key: str, source: str = "Web") -> dict:
         if pack_key not in self._pack_map:
             return {"ok": False, "error": f"unbekannter Pack {pack_key}"}
         bus, addr = self._pack_map[pack_key]
@@ -393,7 +450,9 @@ class Engine:
         except (TransportError, P.ProtocolError) as e:
             log.warning("power_off %s failed: %s", pack_key, e)
             return {"ok": False, "error": str(e)}
-        log.info("Power Off an %s gesendet", pack_key)
+        # expected ~5s reset -> classify the following offline as expected, not a fault
+        self._po_grace[pack_key] = time.monotonic() + 12.0
+        log.info("Power Off an %s gesendet [Quelle: %s]", pack_key, source)
         return {"ok": True}
 
     def dispatch(self, readings, on_reading=None) -> None:
@@ -416,16 +475,18 @@ class Engine:
         """Let MQTT command topics drive set_mos / power_off."""
         def on_cmd(pack_key: str, action: str, value: bool):
             if action == "cfet":
-                self.set_mos(pack_key, cfet=value)
+                self.set_mos(pack_key, cfet=value, source="MQTT")
             elif action == "dfet":
-                self.set_mos(pack_key, dfet=value)
+                self.set_mos(pack_key, dfet=value, source="MQTT")
             elif action == "poweroff" and value:
-                self.power_off(pack_key)
+                self.power_off(pack_key, source="MQTT")
         for s in self.sinks:
             if hasattr(s, "set_command_callback"):
                 s.set_command_callback(on_cmd)
 
     def close(self) -> None:
+        if self._debug_timer is not None:
+            self._debug_timer.cancel()
         self._pool.shutdown(wait=False)
         for s in self.sinks:
             s.close()
