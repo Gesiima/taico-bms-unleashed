@@ -16,7 +16,6 @@ Erledigte Releases sind in `CHANGELOG.md` dokumentiert. Hier nur der Ausblick.
 - Weitere Warn-/Schutzarten dekodieren (Unterspannung, Übertemperatur, Überstrom …),
   sobald Mitschnitte mit diesen Zuständen vorliegen. Aktuell gesichert: Zelle/Pack
   Überspannung (Warnung) und Zelle Überspannung (Schutz).
-- Optional: Warnungen/Schutz zusätzlich über MQTT veröffentlichen.
 
 **Protokoll-Funktionen (Kern vorhanden, GUI offen)**
 - Parameter-Tab: alle 105 Parameter lesen/schreiben (CID2 47/49) mit Rücklese-Prüfung.

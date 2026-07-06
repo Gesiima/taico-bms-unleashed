@@ -21,6 +21,51 @@ from .transport import BaseTransport, TransportError, make_transport
 log = logging.getLogger("vkbms.poller")
 
 
+def setup_logging(cfg: dict) -> None:
+    """Configure root logging once, for both entrypoints (web + logger).
+
+    Console/journal gets `log_level` (default INFO) so the systemd journal stays
+    lean. If `log_file.enabled`, a daily-rotating file additionally captures down
+    to its own level (default DEBUG), so verbose per-bus DEBUG / raw frames land
+    in the file — not the journal. Retention = number of daily files kept.
+    """
+    import os
+    from logging.handlers import TimedRotatingFileHandler
+
+    console_level = getattr(logging, str(cfg.get("log_level", "INFO")).upper(), logging.INFO)
+    fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+
+    lf = cfg.get("log_file", {}) or {}
+    file_enabled = bool(lf.get("enabled", False))
+    file_level = getattr(logging, str(lf.get("level", "DEBUG")).upper(), logging.DEBUG)
+
+    root = logging.getLogger()
+    # root must pass the lowest level so the file handler can still see DEBUG
+    root.setLevel(min(console_level, file_level) if file_enabled else console_level)
+    for h in list(root.handlers):        # idempotent: clear handlers on re-init
+        root.removeHandler(h)
+
+    console = logging.StreamHandler()
+    console.setLevel(console_level)
+    console.setFormatter(fmt)
+    root.addHandler(console)
+
+    if file_enabled:
+        path = lf.get("path", "data/logs/vkbms.log")
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+        retention = int(lf.get("retention_days", 2))
+        fh = TimedRotatingFileHandler(path, when="midnight", interval=1,
+                                      backupCount=retention, encoding="utf-8")
+        fh.setLevel(file_level)
+        fh.setFormatter(fmt)
+        root.addHandler(fh)
+        log.info("Logdatei aktiv: %s (Ebene %s, Aufbewahrung %d Tage)",
+                 path, logging.getLevelName(file_level), retention)
+
+    # keep third-party noise out of the (DEBUG) file/journal
+    logging.getLogger("werkzeug").setLevel(logging.WARNING)
+
+
 @dataclass
 class Bus:
     name: str
@@ -30,6 +75,15 @@ class Bus:
     read_status: bool = True
     timeout: float = 1.0
     lock: threading.Lock = field(default_factory=threading.Lock)  # serialize socket use
+    logger: logging.Logger = field(default_factory=lambda: log)   # per-bus child logger
+    debug_raw: bool = False                                       # log full TX/RX hex frames
+
+
+def _hex(data) -> str:
+    """Uppercase, space-separated hex of a frame (bytes or str) for raw DEBUG dumps."""
+    if isinstance(data, str):
+        data = data.encode("latin-1", "replace")
+    return " ".join(f"{b:02X}" for b in data)
 
 
 def _slug(name: str) -> str:
@@ -74,45 +128,79 @@ def build_buses(cfg: dict) -> list[Bus]:
     for i, b in enumerate(cfg.get("buses", [])):
         if not b.get("enabled", True):
             continue                       # persistent „inaktiv" -> Bus nicht aufbauen
+        name = b.get("name", f"bus{i}")
+        # per-bus child logger: setting its level to DEBUG surfaces this bus's detail
+        # even when the root level is higher (INFO/WARNING).
+        blog = logging.getLogger(f"vkbms.bus.{_slug(name)}")
+        lvl = b.get("log_level")
+        if lvl:
+            blog.setLevel(str(lvl).upper())
         buses.append(Bus(
-            name=b.get("name", f"bus{i}"),
+            name=name,
             transport=make_transport(b["connection"]),
             addresses=_parse_addresses(b["addresses"]),
-            label=b.get("label", b.get("name", f"bus{i}")),
+            label=b.get("label", name),
             read_status=bool(b.get("read_status", True)),
             timeout=float(b.get("timeout", 1.0)),
+            logger=blog,
+            debug_raw=bool(b.get("debug_raw_frames", False)),
         ))
     return buses
+
+
+def _bus_query(bus: Bus, req, label: str):
+    """Send one request and return the parsed frame. When the bus has
+    debug_raw enabled, log the full TX/RX frames as hex."""
+    lg = bus.logger
+    if bus.debug_raw:
+        lg.debug("TX %s: %s", label, _hex(req))
+    raw = bus.transport.query(req, bus.timeout)
+    if bus.debug_raw:
+        lg.debug("RX %s: %s", label, _hex(raw))
+    return P.parse_frame(raw)
 
 
 def poll_pack(bus: Bus, address: int):
     """Return (AnalogReading, StatusReading|None) or None on failure.
 
     Per-attempt failures are logged at DEBUG only; the Engine logs a single
-    clear line when a pack changes between online and offline.
+    clear line when a pack changes between online and offline. With the bus
+    logger at DEBUG, each request is echoed in human-readable form (and, with
+    debug_raw_frames, as raw hex).
     """
+    lg = bus.logger
     try:
+        lg.debug("→ Analog anfordern (Adr %d)", address)
         with bus.lock:
-            resp = P.parse_frame(bus.transport.query(P.req_analog(address), bus.timeout))
+            resp = _bus_query(bus, P.req_analog(address), f"analog adr{address}")
         if not resp.ok:
-            log.debug("[%s] pack %d analog RTN=%#x", bus.name, address, resp.rtn)
+            lg.debug("[%s] pack %d analog RTN=%#x", bus.name, address, resp.rtn)
             return None
         analog = P.decode_analog(resp)
         analog.source = pack_identity(bus, address)
         analog.pack_key = pack_key(bus, address)
+        if analog.cells_mv:
+            lg.debug("← Analog: U=%.2f V, I=%.2f A, SOC=%d %%, Zellen min %d / max %d mV (Δ %d)",
+                     analog.voltage_v, analog.current_a, analog.soc,
+                     min(analog.cells_mv), max(analog.cells_mv),
+                     max(analog.cells_mv) - min(analog.cells_mv))
     except (TransportError, P.ProtocolError, IndexError) as e:
-        log.debug("[%s] pack %d analog failed: %s", bus.name, address, e)
+        lg.debug("[%s] pack %d analog failed: %s", bus.name, address, e)
         return None
 
     status = None
     if bus.read_status:
         try:
+            lg.debug("→ Status anfordern (Adr %d)", address)
             with bus.lock:
-                sresp = P.parse_frame(bus.transport.query(P.req_status(address), bus.timeout))
+                sresp = _bus_query(bus, P.req_status(address), f"status adr{address}")
             if sresp.ok:
                 status = P.decode_status(sresp)
+                lg.debug("← Status: CFET=%s DFET=%s Warnungen=[%s] Schutz=[%s]",
+                         status.cfet_on, status.dfet_on,
+                         ", ".join(status.warnings), ", ".join(status.protections))
         except (TransportError, P.ProtocolError, IndexError) as e:
-            log.debug("[%s] pack %d status failed: %s", bus.name, address, e)
+            lg.debug("[%s] pack %d status failed: %s", bus.name, address, e)
     if status is not None:
         analog.warnings = status.warnings
         analog.protections = status.protections
@@ -260,14 +348,22 @@ class Engine:
                 | (P.MOS_DFET if want_dfet else 0)
                 | (P.MOS_CURRENT_LIMIT if st["cl"] else 0))
         status = None
+        lg = bus.logger
+        lg.debug("→ MOS setzen (Adr %d): CFET=%s DFET=%s (Maske %#04x)",
+                 addr, want_cfet, want_dfet, mask)
         try:
             with bus.lock:
-                bus.transport.query(P.req_mos_control(addr, mask), bus.timeout)
+                cmd = P.req_mos_control(addr, mask)
+                if bus.debug_raw:
+                    lg.debug("TX mos adr%d: %s", addr, _hex(cmd))
+                raw = bus.transport.query(cmd, bus.timeout)
+                if bus.debug_raw:
+                    lg.debug("RX mos adr%d: %s", addr, _hex(raw))
                 deadline = time.monotonic() + 2.0
                 while True:
                     time.sleep(0.3)
                     try:
-                        sresp = P.parse_frame(bus.transport.query(P.req_status(addr), bus.timeout))
+                        sresp = _bus_query(bus, P.req_status(addr), f"status adr{addr}")
                         status = P.decode_status(sresp) if sresp.ok else status
                     except (TransportError, P.ProtocolError, IndexError):
                         pass  # einzelne Lesefehler tolerieren, bis Deadline
@@ -280,6 +376,7 @@ class Engine:
             return {"ok": False, "error": str(e)}
         if status:
             st["cfet"], st["dfet"] = status.cfet_on, status.dfet_on
+        lg.debug("← MOS Rücklese (Adr %d): CFET=%s DFET=%s", addr, st["cfet"], st["dfet"])
         log.info("MOS %s -> CFET=%s DFET=%s (gewünscht %s/%s)",
                  pack_key, st["cfet"], st["dfet"], want_cfet, want_dfet)
         return {"ok": True, "cfet": st["cfet"], "dfet": st["dfet"],
@@ -337,10 +434,7 @@ class Engine:
 
 
 def run(cfg: dict) -> None:
-    logging.basicConfig(
-        level=getattr(logging, cfg.get("log_level", "INFO").upper(), logging.INFO),
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    setup_logging(cfg)
     engine = Engine(cfg)
     log.info("Logger: %d bus(es) | poll %.1fs · live %.1fs · mqtt %.1fs · db %.1fs | %d sink(s)",
              len(engine.buses), engine.poll_interval, engine.live_interval,

@@ -173,23 +173,28 @@ def create_app(cfg: dict):
 
     @app.route("/")
     def index():
+        """Serve the live monitor dashboard."""
         return _page("index.html")
 
     @app.route("/chart")
     def chart():
+        """Serve the history/live chart page."""
         return _page("chart.html")
 
     @app.route("/settings")
     def settings():
+        """Serve the configuration editor page."""
         return _page("settings.html")
 
     @app.route("/vendor/<path:fn>")
     def vendor(fn):
+        """Serve bundled front-end vendor assets (e.g. uPlot)."""
         from flask import send_from_directory
         return send_from_directory(os.path.join(web_dir, "vendor"), fn)
 
     @app.route("/api/state")
     def state():
+        """Live snapshot for the UI: all packs plus meta (version, scale, buses)."""
         buses = []
         if _engine:
             for b in _engine.buses:
@@ -207,6 +212,7 @@ def create_app(cfg: dict):
 
     @app.route("/api/pause", methods=["POST"])
     def pause():
+        """Pause/resume a bus at runtime (frees the serial line without stopping)."""
         d = request.get_json(force=True)
         if _engine is None:
             return jsonify({"ok": False, "error": "engine not ready"}), 503
@@ -214,6 +220,7 @@ def create_app(cfg: dict):
 
     @app.route("/api/db/download")
     def db_download():
+        """Download the SQLite DB (WAL checkpointed first for a complete file)."""
         sq = (_cfg.get("output", {}) or {}).get("sqlite", {}) or {}
         path = sq.get("path", "data/bms.db")
         if not os.path.isabs(path):
@@ -231,6 +238,7 @@ def create_app(cfg: dict):
 
     @app.route("/api/history")
     def history():
+        """Downsampled history for a pack: ?minutes= (live) or ?from=&to= (range)."""
         source = request.args.get("source", "")
         minutes = request.args.get("minutes", type=int)
         max_points = request.args.get("max_points", default=2000, type=int)
@@ -244,6 +252,7 @@ def create_app(cfg: dict):
 
     @app.route("/api/mos", methods=["POST"])
     def mos():
+        """Switch CFET/DFET for a pack (delegates to the engine, verifies readback)."""
         d = request.get_json(force=True)
         if _engine is None:
             return jsonify({"ok": False, "error": "engine not ready"}), 503
@@ -252,6 +261,7 @@ def create_app(cfg: dict):
 
     @app.route("/api/poweroff", methods=["POST"])
     def poweroff():
+        """Trigger a BMS Power Off (~5s reset) for a pack."""
         d = request.get_json(force=True)
         if _engine is None:
             return jsonify({"ok": False, "error": "engine not ready"}), 503
@@ -259,6 +269,7 @@ def create_app(cfg: dict):
 
     @app.route("/api/config", methods=["GET", "POST"])
     def config_io():
+        """GET the masked config, or POST a new config to persist to disk."""
         if request.method == "GET":
             return jsonify(_masked_config())
         try:
@@ -269,6 +280,7 @@ def create_app(cfg: dict):
 
     @app.route("/api/restart", methods=["POST"])
     def restart():
+        """Exit the process so systemd (Restart=always) starts a fresh instance."""
         log.info("Neustart über GUI angefordert")
         threading.Timer(0.7, lambda: os._exit(0)).start()  # systemd Restart=always
         return jsonify({"ok": True})
@@ -280,10 +292,8 @@ def run(cfg: dict, config_path: str | None = None) -> None:
     global _config_path, _cfg
     _cfg = cfg
     _config_path = config_path or "config.yaml"
-    logging.basicConfig(
-        level=getattr(logging, cfg.get("log_level", "INFO").upper(), logging.INFO),
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    from .poller import setup_logging
+    setup_logging(cfg)
     web = cfg.get("web", {})
     host = web.get("host", "0.0.0.0")
     port = int(web.get("port", 8080))

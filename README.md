@@ -99,6 +99,39 @@ python run_logger.py
 ```
 Beenden mit Ctrl-C. Für Dauerbetrieb auf einem Server siehe `deploy/README-server.md`.
 
+### Logging / Diagnose
+
+Global über `log_level` (`DEBUG | INFO | WARNING | ERROR`). Zusätzlich lässt sich das
+Logging **pro Bus** feiner stellen (praktisch, um gezielt nur ein BMS mitzuschneiden):
+
+```yaml
+buses:
+  - name: main
+    # ...
+    log_level: DEBUG        # nur dieser Bus: lesbare Zeile je Anfrage/Befehl
+    debug_raw_frames: true  # zusätzlich vollständige TX/RX-Frames als Hex
+```
+
+Bei `DEBUG` schreibt das Tool je Abfrage/Schaltbefehl eine gut lesbare Zeile (was ans BMS
+geht und was dekodiert zurückkommt, inkl. MOS-Rücklese). `debug_raw_frames: true` ergänzt
+den kompletten Frame-Verkehr als Hex. Mitlesen z. B. mit `journalctl -u vkbms -f`.
+
+**Logdatei statt Journal für DEBUG.** Damit ausführliches DEBUG nicht das systemd-Journal
+aufbläht, kann eine **tägliche Logdatei** aktiviert werden. Konsole/Journal bleibt dann bei
+`log_level` (z. B. INFO), die Datei fängt DEBUG/Rohframes ab:
+
+```yaml
+log_level: INFO
+log_file:
+  enabled: true
+  path: data/logs/vkbms.log
+  level: DEBUG          # Datei-Ebene (unabhängig vom Journal)
+  retention_days: 2     # tägliche Rotation, 2 Dateien behalten
+```
+
+Zusätzlich setzt die systemd-Unit `LogLevelMax=info`, sodass der Dienst ohnehin nichts
+unter INFO ins Journal schreibt. Alles auch über die **Einstellungs-Seite** konfigurierbar.
+
 ## MQTT-Topics
 
 Pro Pack wird eindeutig je Bus adressiert: `bms/<name>/pack<id>/…` (`<name>` =
@@ -114,9 +147,16 @@ Bus-Name aus der Config, kleingeschrieben/ohne Leerzeichen, z. B. `bms1`). Damit
 - `bms/<name>/pack<id>/temp/cell_t1` … `temp/mos_t`
 - `bms/<name>/pack<id>/balance_mask` (16-Bit) und `…/balancing` (Liste aktiver Zellen)
 - `bms/<name>/pack<id>/alarm`, `…/warnings`, `…/protections`
-- `bms/<name>/pack<id>/control/cfet`, `control/dfet` → aktueller FET-Status (`true`/`false`)
-- Befehle: `bms/<name>/pack<id>/control/cfet/set`, `control/dfet/set`, `control/poweroff/set`
+- `bms/<name>/pack<id>/control/cfet`, `control/dfet` → **schreibbares** Objekt:
+  zeigt den aktuellen FET-Status **und** schaltet bei Wertänderung (ein Objekt für
+  Status und Befehl; die eigenen Rückmeldungen des Tools werden nicht als Befehl
+  gewertet, keine Schleife).
+- `bms/<name>/pack<id>/control/poweroff` → schreibbar; `true` löst Power Off aus und
+  wird danach automatisch auf `false` zurückgesetzt (Momentschalter).
 - `bms/<name>/pack<id>/state` → Gesamt-JSON (nur wenn `publish_state_json: true`)
+
+> Hinweis: Lehnt das BMS ein Schalten ab (z. B. Last aktiv), springt das Objekt beim
+> nächsten Zyklus auf den echten Zustand zurück — das ist korrektes Verhalten, kein Fehler.
 
 ## JSON-API (Web)
 
@@ -188,7 +228,7 @@ Steuerung unter `control/` (CFET/DFET), Temperaturen, Kennwerte und der Online-S
 
 ## Stand & Roadmap
 
-Aktuelle Version: **v0.11.0**. Änderungen je Release in `CHANGELOG.md`, geplante Punkte
+Aktuelle Version: **v0.12.0**. Änderungen je Release in `CHANGELOG.md`, geplante Punkte
 in `ROADMAP.md`.
 
 ## Mitwirkung / Attribution

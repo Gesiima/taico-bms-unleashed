@@ -9,7 +9,15 @@ offline_after: 3          # nach N Fehlversuchen gilt ein BMS als offline
 cell_alert_mv: 3600       # Zellen >= diesem Wert (mV) werden hervorgehoben (0 = aus)
 cell_scale_min_mv: 2500   # feste Zellbalken-Skala: Untergrenze (mV)
 cell_scale_max_mv: 3650   # feste Zellbalken-Skala: Obergrenze (mV)
-log_level: INFO           # DEBUG | INFO | WARNING | ERROR
+log_level: INFO           # Konsole/Journal: DEBUG | INFO | WARNING | ERROR
+
+# Optionale Logdatei (taegliche Rotation). Faengt ausfuehrliches DEBUG/Rohframes ab,
+# ohne das systemd-Journal aufzublaehen (Journal bleibt bei log_level = INFO schlank).
+log_file:
+  enabled: false          # true = zusaetzlich in Datei schreiben
+  path: data/logs/vkbms.log
+  level: DEBUG            # Ebene der Datei (unabhaengig von log_level)
+  retention_days: 2       # Anzahl taeglicher Dateien, die behalten werden
 
 # Web dashboard (run_web.py)
 web:
@@ -29,6 +37,10 @@ buses:
     addresses: [1, 2]     # the pack addresses on this bus (see parameter #1 per pack)
     read_status: true     # also poll the status/alarm block (CID2 44)
     timeout: 1.0
+    # Per-bus diagnostics (optional):
+    # log_level: DEBUG        # override the global level for THIS bus only -> readable
+    #                         # one-line-per-request logging (what is sent to / read from BMS)
+    # debug_raw_frames: false # additionally dump the full TX/RX frames as hex
 
   # Example of a local serial port instead of TCP (needs pyserial):
   # - name: usb

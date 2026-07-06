@@ -22,10 +22,13 @@ class TransportError(Exception):
 
 
 class BaseTransport:
-    def open(self) -> None: ...
-    def close(self) -> None: ...
-    def _write(self, data: bytes) -> None: ...
-    def _read(self, n: int) -> bytes: ...
+    """Abstract byte transport. Subclasses implement the four primitives below;
+    `query` builds the request/response framing on top of them (send, then read
+    until the CR frame terminator or timeout)."""
+    def open(self) -> None: ...      # establish the connection (idempotent)
+    def close(self) -> None: ...     # close and release the connection
+    def _write(self, data: bytes) -> None: ...   # raw send
+    def _read(self, n: int) -> bytes: ...         # raw receive (up to n bytes)
 
     def query(self, request: bytes, timeout: float = 1.0) -> bytes:
         """Send a request and read a full frame (terminated by CR)."""
@@ -46,6 +49,9 @@ class BaseTransport:
 
 
 class TcpTransport(BaseTransport):
+    """TCP client for serial-over-TCP gateways (e.g. HF5122). Reconnects with
+    exponential backoff (1→2→4→8→15s), keeps the socket alive, and drains any
+    stale bytes before each write so a request always reads its own reply."""
     def __init__(self, host: str, port: int = 9999, connect_timeout: float = 4.0,
                  read_timeout: float = 0.3):
         self.host = host
@@ -53,10 +59,11 @@ class TcpTransport(BaseTransport):
         self.connect_timeout = connect_timeout
         self.read_timeout = read_timeout
         self.sock: Optional[socket.socket] = None
-        self._backoff = 1.0
-        self._next_try = 0.0
+        self._backoff = 1.0            # grows on failure, resets on success
+        self._next_try = 0.0           # monotonic time before which we won't retry
 
     def open(self) -> None:
+        """(Re)connect, honoring the backoff window set by a prior failure."""
         self.close()
         now = time.monotonic()
         if now < self._next_try:
@@ -124,6 +131,7 @@ class TcpTransport(BaseTransport):
 
 
 class SerialTransport(BaseTransport):
+    """Direct serial port (pyserial) for a locally attached RS-232/485 adapter."""
     def __init__(self, port: str, baudrate: int = 9600):
         self.port = port
         self.baudrate = baudrate

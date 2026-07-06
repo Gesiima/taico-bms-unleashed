@@ -37,6 +37,6 @@ sudo systemctl enable --now vkbms
 ## Nützliche Befehle
 ```bash
 systemctl status vkbms
-journalctl -u vkbms -f          # Live-Log
+journalctl -u vkbms -f          # Live-Log (DEBUG/pro-Bus via log_level bzw. debug_raw_frames in der Config)
 sudo systemctl restart vkbms
 ```

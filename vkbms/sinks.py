@@ -151,6 +151,13 @@ class MqttSink:
         self.status_topic = f"{self.base}/status"
         self.connected = False
         self._cmd_cb = None           # set via set_command_callback (engine)
+        # Loop suppression for writable control objects (single object = status + command):
+        #   _last_pub[topic] = last value WE published; an inbound message equal to it is
+        #   our own echo and is ignored. A different value is a real user command.
+        self._last_pub = {}
+        #   _seen = pack keys we have already published control state for; retained
+        #   startup values for unseen packs are ignored (no accidental switching).
+        self._seen = set()
 
         # paho-mqtt 2.x requires an explicit callback API version; fall back to 1.x
         try:
@@ -169,10 +176,10 @@ class MqttSink:
                 self.connected = True
                 log.info("MQTT verbunden mit %s:%s", host, port)
                 client.publish(self.status_topic, "online", retain=True)
-                # command topics: bms/+/control/{cfet,dfet,poweroff}/set
-                # command topics: bms/<name>/pack<id>/control/{cfet,dfet,poweroff}/set
+                # One writable object per control (status + command in one topic):
+                #   bms/<name>/pack<id>/control/{cfet,dfet,poweroff}
                 for act in ("cfet", "dfet", "poweroff"):
-                    client.subscribe(f"{self.base}/+/+/control/{act}/set")
+                    client.subscribe(f"{self.base}/+/+/control/{act}")
             else:
                 self.connected = False
                 log.error("MQTT-Verbindung abgelehnt (Code %s) – Login/Port prüfen", code)
@@ -182,15 +189,30 @@ class MqttSink:
             log.warning("MQTT getrennt – versuche erneut zu verbinden…")
 
         def on_message(client, userdata, msg):
-            # topic: bms/<name>/pack<id>/control/cfet/set -> key="<name>/pack<id>"
+            # Writable control object, e.g. bms/<name>/pack<id>/control/cfet
+            #   -> pack_key = "<name>/pack<id>", action = "cfet"
             try:
+                raw = msg.payload.decode().strip()
+                if raw == "":
+                    return                       # ignore empty (e.g. cleared retained)
                 parts = msg.topic.split("/")
-                pack_key = parts[-5] + "/" + parts[-4]
-                action = parts[-2]
-                raw = msg.payload.decode().strip().lower()
-                value = raw in ("1", "true", "on", "yes")
+                action = parts[-1]
+                if action not in ("cfet", "dfet", "poweroff"):
+                    return
+                pack_key = parts[-4] + "/" + parts[-3]
+                # Ignore until we have published this pack's state at least once, so a
+                # retained value delivered on (re)connect never triggers a switch.
+                if pack_key not in self._seen:
+                    return
+                # Ignore our own echo: value equal to what we last published.
+                if self._last_pub.get(msg.topic) == raw.lower():
+                    return
+                value = raw.lower() in ("1", "true", "on", "yes")
                 if self._cmd_cb:
                     self._cmd_cb(pack_key, action, value)
+                # poweroff is momentary: reset the object back to false right away.
+                if action == "poweroff":
+                    self._publish_control(pack_key, "poweroff", False)
             except Exception as e:  # noqa: BLE001
                 log.warning("mqtt command ignoriert (%s): %s", msg.topic, e)
 
@@ -241,17 +263,28 @@ class MqttSink:
         except Exception as e:  # noqa: BLE001
             log.warning("mqtt availability publish failed: %s", e)
 
-    def publish_mos(self, pack_key: str, cfet, dfet) -> None:
-        """Publish current FET state, e.g. bms/pack1/control/cfet -> true/false."""
+    def _publish_control(self, pack_key: str, action: str, value: bool) -> None:
+        """Publish a writable control object and remember the value we sent, so the
+        broker's echo of our own message is not mistaken for a user command."""
+        topic = f"{self.base}/{pack_key}/control/{action}"
+        val = "true" if value else "false"
+        self._last_pub[topic] = val
         try:
-            if cfet is not None:
-                self.client.publish(f"{self.base}/{pack_key}/control/cfet",
-                                    "true" if cfet else "false", retain=True)
-            if dfet is not None:
-                self.client.publish(f"{self.base}/{pack_key}/control/dfet",
-                                    "true" if dfet else "false", retain=True)
+            self.client.publish(topic, val, retain=True)
         except Exception as e:  # noqa: BLE001
-            log.warning("mqtt mos publish failed: %s", e)
+            log.warning("mqtt control publish failed: %s", e)
+
+    def publish_mos(self, pack_key: str, cfet, dfet) -> None:
+        """Mirror the current FET state into the writable control objects. The first
+        call for a pack also creates the momentary poweroff object (baseline false)
+        and marks the pack as seen (retained startup values are ignored until then)."""
+        if cfet is not None:
+            self._publish_control(pack_key, "cfet", bool(cfet))
+        if dfet is not None:
+            self._publish_control(pack_key, "dfet", bool(dfet))
+        if pack_key not in self._seen:
+            self._publish_control(pack_key, "poweroff", False)   # baseline, schaltbar
+            self._seen.add(pack_key)
 
     def close(self) -> None:
         try:

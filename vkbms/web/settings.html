@@ -95,7 +95,14 @@ function render(){
     ${row("cell_alert_mv (Zell-Alarm)",field("cell_alert_mv",{type:"number"}))}
     ${row("cell_scale_min_mv (feste Skala)",field("cell_scale_min_mv",{type:"number"}))}
     ${row("cell_scale_max_mv (feste Skala)",field("cell_scale_max_mv",{type:"number"}))}
-    ${row("log_level",field("log_level",{type:"select",options:["DEBUG","INFO","WARNING","ERROR"]}))}
+    ${row("log_level (Konsole/Journal)",field("log_level",{type:"select",options:["DEBUG","INFO","WARNING","ERROR"]}))}
+  </div>`;
+
+  h+=`<h2>Logdatei</h2><div class="grid">
+    ${row("aktiv",field("log_file.enabled",{type:"checkbox"}))}
+    ${row("Pfad",field("log_file.path"))}
+    ${row("Ebene",field("log_file.level",{type:"select",options:["DEBUG","INFO","WARNING","ERROR"]}))}
+    ${row("Aufbewahrung (Tage)",field("log_file.retention_days",{type:"number"}))}
   </div>`;
 
   h+=`<h2>Web</h2><div class="grid">

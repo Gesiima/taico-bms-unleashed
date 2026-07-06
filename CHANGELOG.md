@@ -2,6 +2,37 @@
 
 Format: neueste Version oben. Versionierung: MAJOR.MINOR.PATCH.
 
+## [0.12.0] — 2026-07-05
+### ⚠️ Breaking — MQTT-Steuerung ohne /set
+- Steuerung erfolgt jetzt über **ein** schreibbares Objekt je Funktion:
+  `bms/<name>/pack<id>/control/{cfet,dfet,poweroff}` — Status **und** Befehl in einem.
+  Die bisherigen `…/control/*/set`-Topics entfallen (werden nicht mehr angelegt oder
+  abonniert). **Aufräumen:** alte `…/set`-Objekte im Broker/ioBroker löschen.
+- Wertänderung an `cfet`/`dfet` schaltet den FET; die eigenen Status-Rückmeldungen des
+  Tools werden nicht als Befehl gewertet (Loop-Suppression). Retained-Werte beim
+  (Re-)Connect lösen kein Schalten aus, solange der Pack nicht mindestens einmal
+  veröffentlicht wurde.
+- `poweroff` ist ein Momentschalter: `true` löst aus, danach automatisch zurück auf `false`.
+- Hinweis: Lehnt das BMS ab (Last aktiv), springt das Objekt auf den echten Zustand
+  zurück — erwartetes Verhalten.
+### Hinzugefügt
+- **Lesbares DEBUG-Logging**: je Abfrage/Schaltbefehl eine verständliche Zeile
+  (was ans BMS geht, dekodierte Kernwerte, MOS-Rücklese).
+- **`debug_raw_frames`**: optional vollständige TX/RX-Frames als Hex.
+- **Logging pro Bus**: `log_level` und `debug_raw_frames` je Bus in der Config,
+  um gezielt ein einzelnes BMS mitzuschneiden (eigener Child-Logger je Bus).
+- **Logdatei mit täglicher Rotation** (`log_file`): fängt ausführliches DEBUG/Rohframes
+  ab, während Konsole/Journal bei `log_level` (z. B. INFO) schlank bleibt. Einstellbar
+  über Config und Einstellungs-Seite (Pfad, Ebene, Aufbewahrung in Tagen, Default 2).
+  Die systemd-Unit setzt zusätzlich `LogLevelMax=info`, damit das Journal auch bei
+  aktivem DEBUG nicht vollläuft.
+### Geändert
+- Freundlichere Meldung bei abgelehntem Schalten:
+  „BMS hat das Schalten abgelehnt (vermutlich Last aktiv)".
+- Dokumentation aktualisiert (README: MQTT-Objekte, Logging/Diagnose;
+  `config.example.yaml`: neue Bus-Optionen).
+- Zusätzliche Code-Kommentare/Docstrings (server.py-Routen, transport.py).
+
 ## [0.11.1] — 2026-07-05
 ### Geändert
 - Diagrammhöhe: das versteckte Resize-Eck ersetzt durch eine sichtbare Leiste

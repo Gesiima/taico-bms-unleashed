@@ -16,6 +16,10 @@ Group=admin
 
 Environment=PYTHONUNBUFFERED=1
 
+# Journal schlank halten: nichts unter INFO ins Journal schreiben. Ausfuehrliches
+# DEBUG (z. B. debug_raw_frames) dann ueber eine Logdatei (log_file in der config.yaml).
+LogLevelMax=info
+
 # Sicherheit / Hardening (kompatibel mit Python)
 ProtectSystem=full
 ProtectHome=read-only
