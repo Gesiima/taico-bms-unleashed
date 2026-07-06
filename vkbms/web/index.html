@@ -291,7 +291,7 @@ async function switchFet(pack,fet,card){
   try{
     const res=await (await fetch("/api/mos",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})).json();
     if(!res.ok) toast("Fehler: "+(res.error||"unbekannt"),"err");
-    else if(res.verified===false) toast("BMS hat das Schalten abgelehnt (vermutlich Last aktiv)","warn");
+    else if(res.verified===false) toast("BMS hat das Schalten abgelehnt (unter Last nur der aktive FET schaltbar)","warn");
     else toast(`${fet.toUpperCase()} ${target?"ein":"aus"} – OK`);
   }catch(e){ toast("Server nicht erreichbar","err"); }
   tick();

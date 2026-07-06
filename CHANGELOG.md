@@ -2,6 +2,17 @@
 
 Format: neueste Version oben. Versionierung: MAJOR.MINOR.PATCH.
 
+## [0.12.1] — 2026-07-06
+### Dokumentation
+- Neuer README-Abschnitt „FET-Schaltverhalten / BMS-Verriegelung": CFET = Charge-FET
+  (Ladepfad), DFET = Discharge-FET (Entladepfad); unter Last ist nur der FET des aktiven
+  Vorgangs schaltbar (Laden → CFET, Entladen → DFET), der andere wird vom BMS abgelehnt.
+- Übersicht „erfasste vs. noch offene Status-Flags" ergänzt (transparenter Stand der
+  Dekodierung).
+### Geändert
+- Ablehnungs-Meldung im Monitor präzisiert:
+  „BMS hat das Schalten abgelehnt (unter Last nur der aktive FET schaltbar)".
+
 ## [0.12.0] — 2026-07-05
 ### ⚠️ Breaking — MQTT-Steuerung ohne /set
 - Steuerung erfolgt jetzt über **ein** schreibbares Objekt je Funktion:

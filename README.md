@@ -165,6 +165,33 @@ Bus-Name aus der Config, kleingeschrieben/ohne Leerzeichen, z. B. `bms1`). Damit
 (Bus pausieren/fortsetzen), `GET /api/db/download` (SQLite herunterladen),
 `GET/POST /api/config`, `POST /api/restart`.
 
+## FET-Schaltverhalten / BMS-Verriegelung
+
+- **CFET = Charge-FET** → steuert den **Lade**pfad.
+- **DFET = Discharge-FET** → steuert den **Entlade**pfad.
+
+Das BMS besitzt eine Schutzverriegelung: **Unter Last ist nur der FET des gerade
+aktiven Vorgangs schaltbar**, der andere wird abgelehnt. Konkret beobachtet und bestätigt:
+
+- **Laden aktiv:** CFET schaltbar, **DFET wird abgelehnt**.
+- **Entladen aktiv:** DFET schaltbar, **CFET wird abgelehnt**.
+- **Ruhe (kein Strom):** beide FETs frei schaltbar.
+
+Lehnt das BMS ab, sendet das Tool den Befehl korrekt (die Maske stimmt), das BMS
+übernimmt ihn aber nicht und meldet beim Rücklesen den alten Zustand. Im Monitor
+erscheint dann der Hinweis „BMS hat das Schalten abgelehnt (unter Last nur der aktive
+FET schaltbar)". Das ist **erwartetes Verhalten**, kein Fehler des Tools. Um einen FET
+unter Last zu öffnen, zuerst den Strom wegnehmen (Verbraucher/Ladequelle trennen bzw.
+Ruhezustand abwarten).
+
+### Erfasste vs. noch offene Status-Flags
+
+Verifiziert dekodiert: **CFET-/DFET-Zustand**, Stromrichtung (Laden/Entladen/Ruhe),
+sowie die Überspannungs-Meldungen (Warnung: Zelle/Pack Überspannung; Schutz: Zelle
+Überspannung). **Noch nicht dekodiert** (mangels Mitschnitten): Unterspannung,
+Über-/Untertemperatur, Überstrom (Laden/Entladen), Kurzschluss. Der Current-Limit-Zustand
+lässt sich senden, aber nicht aus dem Status zurücklesen.
+
 ## Projektstruktur
 
 ```
@@ -228,7 +255,7 @@ Steuerung unter `control/` (CFET/DFET), Temperaturen, Kennwerte und der Online-S
 
 ## Stand & Roadmap
 
-Aktuelle Version: **v0.12.0**. Änderungen je Release in `CHANGELOG.md`, geplante Punkte
+Aktuelle Version: **v0.12.1**. Änderungen je Release in `CHANGELOG.md`, geplante Punkte
 in `ROADMAP.md`.
 
 ## Mitwirkung / Attribution
