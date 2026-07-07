@@ -2,6 +2,12 @@
 
 Format: neueste Version oben. Versionierung: MAJOR.MINOR.PATCH.
 
+## [0.14.2] — 2026-07-07
+### Geändert
+- **Produktinfo (Modell · SN · FW)** wird nicht mehr als eigene Zeile unter dem Titel
+  angezeigt (das verschob Buttons/Warnungen), sondern rechts in der Zellspannungs-Kopfzeile
+  neben „min · max · Δ".
+
 ## [0.14.1] — 2026-07-07
 ### Behoben
 - **Deaktivierter Bus erzeugte Offline-WARNING**: ein per „aktiv" abgeschalteter Bus wurde

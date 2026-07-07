@@ -50,7 +50,6 @@
   .pid{display:flex;flex-direction:column;justify-content:center;line-height:1}
   .pid b{color:var(--text);font:600 30px/1 var(--mono)}
   .pid .sub{font:11px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-top:5px}
-  .pid .pinfo{font:10.5px var(--mono);color:var(--dim);margin-top:3px}
   .badge{font:11px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;padding:5px 10px;border-radius:20px;border:1px solid currentColor}
   .badge.mode{min-width:92px;text-align:center}
   .badge.charge{color:var(--charge)} .badge.discharge{color:var(--discharge)} .badge.idle{color:var(--idle)}
@@ -71,7 +70,9 @@
   .cells-head{display:flex;align-items:baseline;gap:14px;margin-bottom:14px}
   .cells-head .t{font:11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
   .cells-head .spread{font:12px var(--mono);color:var(--muted)} .cells-head .spread b{color:var(--text)}
-  .cells-head .pause{margin-left:auto;font:11px var(--mono);padding:5px 12px;border-radius:7px;
+  .cells-head .pinfo{margin-left:auto;font:10.5px var(--mono);color:var(--dim);white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis;max-width:55%}
+  .cells-head .pause{margin-left:10px;font:11px var(--mono);padding:5px 12px;border-radius:7px;
     border:1px solid var(--line);background:var(--panel2);color:var(--muted);cursor:pointer}
   .cells-head .pause.on{color:var(--discharge);border-color:#f4a64855}
   .cells-head .pause.hidden{display:none}
@@ -167,8 +168,7 @@ function buildCard(p){
   let temps=""; NAMES.forEach(k=>{ temps+=`<div class="tt" data-temp="${k}" style="display:none"><div class="l">${TLABEL[k]}</div><div class="v"></div></div>`; });
   card.innerHTML=`
     <div class="ptop">
-      <div class="pid"><b>${p.bus||p.source||('Pack '+p.pack)}</b><span class="sub" data-sub></span>
-        <span class="pinfo" data-info></span></div>
+      <div class="pid"><b>${p.bus||p.source||('Pack '+p.pack)}</b><span class="sub" data-sub></span></div>
       <span class="badge mode"></span>
       <div class="mos">
         <button class="mosbtn" data-cfet><span>CFET</span> <i></i></button>
@@ -188,6 +188,7 @@ function buildCard(p){
     </div>
     <div class="cells">
       <div class="cells-head"><span class="t">Zellspannungen</span><span class="spread" data-spread></span>
+        <span class="pinfo" data-info></span>
         <button class="pause hidden" data-pause>Pause</button></div>
       <div class="strip">${strip}</div>
     </div>
