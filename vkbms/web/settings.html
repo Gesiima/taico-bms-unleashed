@@ -24,7 +24,7 @@
   .dot{width:9px;height:9px;border-radius:50%;background:var(--dim)}
   .dot.live{background:var(--charge);box-shadow:0 0 10px 1px #46d6a060}
   .dot.stale{background:var(--discharge)} .dot.down{background:var(--alarm)}
-  main{max-width:880px;margin:18px auto;padding:0 18px 80px}
+  main{max-width:880px;margin:18px auto;padding:0 18px 24px}
   h2{font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
      border-bottom:1px solid var(--line);padding-bottom:8px;margin:26px 0 14px}
   .grid{display:grid;grid-template-columns:220px 1fr;gap:10px 16px;align-items:center}
@@ -58,11 +58,6 @@
   <div class="status"><span id="dot" class="dot"></span><span id="stext">…</span><span class="ver">{{VERSION}}</span></div>
 </header>
 <main id="main">Lade Konfiguration…</main>
-
-<div style="max-width:880px;margin:0 auto 60px;padding:0 18px">
-  <button id="restartNow" style="font:12.5px var(--mono);background:transparent;color:var(--discharge);
-    border:1px solid #f4a64855;border-radius:8px;padding:9px 16px;cursor:pointer">Dienst neu starten</button>
-</div>
 
 <div class="bar" id="bar">
   <span class="msg">Änderungen vorhanden – Speichern &amp; Neustart nötig.</span>
@@ -184,6 +179,9 @@ function render(){
     ${row("state-JSON senden",field("output.mqtt.publish_state_json",{type:"checkbox"}))}
   </div><div class="note">Passwort bleibt unverändert, solange das Feld die Maskierung (********) zeigt.</div>`;
 
+  h+=`<div style="margin:22px 0 4px"><button id="restartNow" class="logbtn"
+    style="color:var(--discharge);border-color:#f4a64855">Dienst neu starten</button></div>`;
+
   const m=document.getElementById("main"); m.innerHTML=h;
   m.querySelectorAll("[data-path]").forEach(el=>{
     const ev = el.tagName==="SELECT" ? "change" : (el.type==="checkbox"?"change":"input");
@@ -212,6 +210,13 @@ function render(){
       const r=await (await fetch("/api/log/clear",{method:"POST"})).json();
       alert(r.ok ? ("Log geleert ("+r.removed+" Datei(en)).") : ("Fehler: "+(r.error||"unbekannt")));
     }catch(e){ alert("Server nicht erreichbar."); }
+  };
+  const rn=document.getElementById("restartNow");
+  if(rn) rn.onclick=async()=>{
+    if(!confirm("Dienst jetzt neu starten?")) return;
+    await fetch("/api/restart",{method:"POST"});
+    rn.textContent="Startet neu… Seite lädt in 6 s neu.";
+    setTimeout(()=>location.reload(),6000);
   };
 }
 
@@ -248,12 +253,6 @@ async function pollStatus(){
     st.textContent=(s.connected?"live · ":"veraltet · ")+(s.updated?s.updated.replace("T"," "):"");
   }catch(e){ const d=document.getElementById("dot"); if(d) d.className="dot down"; }
 }
-document.getElementById("restartNow").onclick=async()=>{
-  if(!confirm("Dienst jetzt neu starten?")) return;
-  await fetch("/api/restart",{method:"POST"});
-  document.getElementById("restartNow").textContent="Startet neu… Seite lädt in 6 s neu.";
-  setTimeout(()=>location.reload(),6000);
-};
 pollStatus(); setInterval(pollStatus,2000);
 load();
 </script>

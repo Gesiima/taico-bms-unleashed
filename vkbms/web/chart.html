@@ -104,7 +104,7 @@
       <span class="hint">Tipp: „Alle aus" und dann einzelne Linien einblenden</span></div>
     <div id="legtime"></div>
     <div id="legend" class="legend"></div>
-    <div class="hint">Ziehen = zoomen · Shift+Ziehen = verschieben · Doppelklick oder „Zoom reset" = Vollansicht · Höhe über die Leiste „Höhe ziehen" unter dem Chart anpassen · Zellen links (mV), Spannung/Strom rechts, SOC 0–100 (ohne Achse).</div>
+    <div class="hint">Ziehen = zoomen · Mausrad = X-Zoom · Shift+Mausrad = Y-Zoom · Shift+Ziehen = verschieben · Doppelklick oder „Zoom reset" = Vollansicht · Höhe über die Leiste „Höhe ziehen" unter dem Chart anpassen · Zellen links (mV), Spannung/Strom rechts, SOC 0–100 (ohne Achse).</div>
   </div>
 </main>
 <script src="/vendor/uPlot.iife.min.js"></script>
@@ -190,6 +190,18 @@ function makeChart(){
     const up=()=>{ document.removeEventListener("mousemove",move); document.removeEventListener("mouseup",up); };
     document.addEventListener("mousemove",move); document.addEventListener("mouseup",up);
   }, true);   // capture-Phase, damit uPlots Zoom-Handler nicht auslöst
+  // Mausrad = X (Zeit) zoomen, Shift+Mausrad = Y (mV/V/A) zoomen – jeweils um den Cursor
+  chart.over.addEventListener("wheel", e=>{
+    e.preventDefault();
+    const rect=chart.over.getBoundingClientRect();
+    const f = e.deltaY < 0 ? 0.85 : 1/0.85;          // hoch = rein, runter = raus
+    const zoomScale=(sc, px)=>{ const s=chart.scales[sc]; if(s.min==null||s.max==null) return;
+      const v=chart.posToVal(px, sc);
+      chart.setScale(sc,{min:v-(v-s.min)*f, max:v+(s.max-v)*f}); };
+    zoomed=true;
+    if(e.shiftKey){ const py=e.clientY-rect.top; ["mv","v","a"].forEach(s=>zoomScale(s,py)); }
+    else { zoomScale("x", e.clientX-rect.left); }
+  }, {passive:false});
   buildLegend();
   // ziehbare Höhe: Wrapper-Höhe aus Session wiederherstellen + auf Änderungen reagieren
   const wrap=document.getElementById("chartwrap");
@@ -309,7 +321,8 @@ function setMode(m){
   document.querySelectorAll("#modes .seg").forEach(b=>b.classList.toggle("active",+b.dataset.live===live));
   document.getElementById("range").style.display = live>0 ? "none":"flex";
   if(timer){ clearInterval(timer); timer=null; }
-  if(live===0) zoomed=false;
+  if(chart) resetZoom();          // Moduswechsel: vorherigen Zoom verwerfen, sonst liegt
+  //                                das (Live-)Fenster ggf. außerhalb des sichtbaren Bereichs
   loadData();
   if(live>0) timer=setInterval(loadData, live>=120?5000:2000);
 }

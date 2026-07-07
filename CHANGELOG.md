@@ -2,6 +2,18 @@
 
 Format: neueste Version oben. Versionierung: MAJOR.MINOR.PATCH.
 
+## [0.15.0] — 2026-07-07
+### Hinzugefügt
+- **Mausrad-Zoom** im Chart: Mausrad zoomt die Zeitachse (X), **Shift+Mausrad** die
+  Werteachsen (mV/V/A) – jeweils zentriert auf die Cursor-Position. Ziehen (Box-Zoom),
+  Shift+Ziehen (Pan) und Doppelklick/„Zoom reset" bleiben unverändert.
+### Behoben
+- **Zoom beim Moduswechsel**: Wechsel von „Verlauf" auf einen Live-Modus setzt den Zoom
+  jetzt zurück (vorher lag das Live-Fenster ggf. außerhalb des sichtbaren Bereichs → leer).
+### Geändert
+- **Einstellungen**: „Dienst neu starten" sitzt jetzt direkt am Ende des Formulars, der
+  große Leerraum darüber ist entfernt (Padding reduziert).
+
 ## [0.14.4] — 2026-07-07
 ### Hinzugefügt
 - **Verschieben (Pan) im Chart**: mit **Shift+Ziehen** lässt sich der sichtbare Bereich

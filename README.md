@@ -40,8 +40,8 @@ zurückentwickelt; Details in `VKING_BMS_Protokoll_Spezifikation.md`.
   die dem Cursor folgen (inkl. Cursor-Zeit), und **Hover-Highlight** (überfahrene Linie
   hervorgehoben, Rest gedimmt). **„Alle aus/an"**-Schalter zum schnellen Filtern vieler
   Linien und ein **Cursor-Tooltip** (Name + Wert der nächstliegenden Linie am Mauszeiger). Aktives
-  Zell-Balancing wird als Punkte auf der jeweiligen Zell-Linie markiert. Zoom per Ziehen,
-  Verschieben per Shift+Ziehen, Vollansicht per Doppelklick.
+  Zell-Balancing wird als Punkte auf der jeweiligen Zell-Linie markiert. Zoom per Ziehen oder Mausrad (X);
+  Shift+Mausrad zoomt Y, Shift+Ziehen verschiebt; Vollansicht per Doppelklick.
 - Kontrastreiche 16-Farben-Palette für die Zellen; Diagrammbreite folgt dem Browserfenster.
 - Verlustfreies Downsampling für große Zeiträume; SQLite-Index für schnelle Abfragen.
 
@@ -313,7 +313,7 @@ Steuerung unter `control/` (CFET/DFET), Temperaturen, Kennwerte und der Online-S
 
 ## Stand & Roadmap
 
-Aktuelle Version: **v0.14.4**. Änderungen je Release in `CHANGELOG.md`, geplante Punkte
+Aktuelle Version: **v0.15.0**. Änderungen je Release in `CHANGELOG.md`, geplante Punkte
 in `ROADMAP.md`.
 
 ## Mitwirkung / Attribution
