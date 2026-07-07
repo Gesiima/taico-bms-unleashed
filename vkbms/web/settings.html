@@ -217,6 +217,17 @@ function render(){
 
 async function load(){
   CFG=await (await fetch("/api/config")).json();
+  // Main/Sub materialisieren (aus Legacy addresses/master_address ableiten), damit die
+  // Werte immer gespeichert werden – auch wenn der Nutzer die Felder nicht anfasst.
+  (CFG.buses||[]).forEach(b=>{
+    if(b.main_address==null){
+      const a=Array.isArray(b.addresses)?b.addresses:[];
+      b.main_address = (b.master_address!=null)?b.master_address : (a.length?a[0]:1);
+      if(b.sub_addresses==null) b.sub_addresses = a.filter(x=>x!==b.main_address);
+    }
+    if(b.sub_addresses==null) b.sub_addresses=[];
+    delete b.addresses; delete b.master_address;
+  });
   ORIG=JSON.stringify(CFG);
   render(); dirty();
 }

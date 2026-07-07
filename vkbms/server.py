@@ -349,6 +349,8 @@ def create_app(cfg: dict):
         if not os.path.exists(path):
             return jsonify({"ok": False, "error": "keine Logdatei vorhanden"}), 404
         return send_file(path, as_attachment=True, download_name=f"vkbms_{ts}.log")
+
+    @app.route("/api/history")
     def history():
         """Downsampled history for a pack: ?minutes= (live) or ?from=&to= (range)."""
         source = request.args.get("source", "")

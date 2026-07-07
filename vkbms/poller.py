@@ -141,20 +141,26 @@ def build_buses(cfg: dict) -> list[Bus]:
             ma = int(ma) if ma not in (None, "") else None
         except (TypeError, ValueError):
             ma = None
-        # New model: main_address (single, required) + sub_addresses (optional, many).
-        # Legacy fallback: addresses[] (+ master_address) for configs not yet re-saved.
+        # Addressing: main_address (single, required) + sub_addresses (optional, many).
+        # Robust against configs where only some of the keys are present:
+        #  - main set                 -> [main] + subs
+        #  - main missing, subs/legacy-> legacy addresses (or []) + subs, master = first
         main = b.get("main_address")
         try:
             main = int(main) if main not in (None, "") else None
         except (TypeError, ValueError):
             main = None
+        subs = _parse_addresses(b.get("sub_addresses", []) or [])
+        legacy = _parse_addresses(b.get("addresses", []) or [])
         if main is not None:
-            subs = [a for a in _parse_addresses(b.get("sub_addresses", []) or []) if a != main]
-            addresses = [main] + subs
+            addresses = [main] + [a for a in subs if a != main]
             master = main
+        elif subs or legacy:
+            base = legacy or []
+            addresses = base + [a for a in subs if a not in base]
+            master = base[0] if base else (addresses[0] if len(addresses) == 1 else ma)
         else:
-            addresses = _parse_addresses(b.get("addresses", []) or [])
-            master = ma
+            addresses, master = [], ma
         if not addresses:
             logging.getLogger("vkbms.poller").warning(
                 "Bus '%s' ohne Adresse (main_address fehlt) – übersprungen", name)

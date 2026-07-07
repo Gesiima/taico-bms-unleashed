@@ -21,6 +21,11 @@ Format: neueste Version oben. Versionierung: MAJOR.MINOR.PATCH.
 - **Chart „Alle aus/an"**: blendet alle Serien mit einem Klick aus/ein — schnelles Filtern
   einzelner Linien bei vielen Kurven.
 - **Chart Cursor-Tooltip**: Name + Wert der nächstliegenden Linie direkt am Mauszeiger.
+### Behoben
+- **Verlauf/Chart blieb leer (404)**: die Route `/api/history` war seit 0.13.0 versehentlich
+  nicht registriert (beim Einfügen der Log-Routen ging der `@app.route`-Decorator verloren).
+  Route wiederhergestellt. Zusätzlich bleibt die `NULL`-sichere Mittelwertbildung aus 0.13.1
+  als Härtung erhalten.
 ### Geändert
 - **DB-Download** aus der Kopfleiste in den SQLite-Abschnitt der Einstellungen verschoben.
 - Begriff **„Log-History"** in UI/Doku (statt „rotierte Backups").
