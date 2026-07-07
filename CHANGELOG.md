@@ -2,6 +2,15 @@
 
 Format: neueste Version oben. Versionierung: MAJOR.MINOR.PATCH.
 
+## [0.14.1] — 2026-07-07
+### Behoben
+- **Deaktivierter Bus erzeugte Offline-WARNING**: ein per „aktiv" abgeschalteter Bus wurde
+  weiterhin in der Erwartungsliste geführt und löste beim Offline-Übergang eine WARNING aus
+  (`… offline (keine Antwort)`). Deaktivierte Busse werden jetzt einmalig als offline geführt
+  (für MQTT/UI) und nur noch auf DEBUG als „deaktiviert (offline)" protokolliert – keine Warnung.
+- Die Adressen deaktivierter Busse werden zudem aus dem **Main/Sub-Modell** (mit Legacy-
+  Fallback) statt nur aus `addresses` bestimmt.
+
 ## [0.14.0] — 2026-07-06
 ### Hinzugefügt
 - **Main-/Sub-Adressierung**: pro Bus eine **Main-Adresse** (Pflicht, genau ein direkt

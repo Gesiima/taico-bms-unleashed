@@ -124,6 +124,25 @@ def _parse_addresses(value) -> list[int]:
     return out
 
 
+def _bus_addresses(bd: dict) -> list[int]:
+    """Effective pack addresses for a bus config dict, honoring the main/sub model
+    with a fallback to the legacy `addresses` list. Used for both active and
+    disabled buses so their pack keys are consistent."""
+    main = bd.get("main_address")
+    try:
+        main = int(main) if main not in (None, "") else None
+    except (TypeError, ValueError):
+        main = None
+    subs = _parse_addresses(bd.get("sub_addresses", []) or [])
+    legacy = _parse_addresses(bd.get("addresses", []) or [])
+    if main is not None:
+        return [main] + [a for a in subs if a != main]
+    if subs or legacy:
+        base = legacy or []
+        return base + [a for a in subs if a not in base]
+    return []
+
+
 def build_buses(cfg: dict) -> list[Bus]:
     buses = []
     for i, b in enumerate(cfg.get("buses", [])):
@@ -264,17 +283,20 @@ class Engine:
         # per-pack availability tracking (online/offline via MQTT)
         self.offline_after = int(cfg.get("offline_after", 3))
         active = [pack_key(b, a) for b in self.buses for a in b.addresses]
-        # auch deaktivierte Busse kennen, damit sie in MQTT als offline erscheinen
-        disabled = []
+        self._expected = active
+        self._miss = {k: 0 for k in active}
+        self._online = {k: None for k in active}
+        # Disabled buses: known but intentionally offline (not polled, no warning).
+        # Published once as offline so they still show up in MQTT/UI as such.
+        self._disabled = set()
         for bd in cfg.get("buses", []):
             if bd.get("enabled", True):
                 continue
             slug = _slug(bd.get("name", ""))
-            for a in _parse_addresses(bd.get("addresses", [])):
-                disabled.append(f"{slug}/pack{a}")
-        self._expected = active + disabled
-        self._miss = {k: 0 for k in self._expected}
-        self._online = {k: None for k in self._expected}
+            for a in _bus_addresses(bd):
+                self._disabled.add(f"{slug}/pack{a}")
+        for k in self._disabled:
+            self._online.setdefault(k, None)
         # map pack key -> (bus, address) for MOS / power-off commands (nur aktive)
         self._pack_map = {pack_key(b, a): (b, a) for b in self.buses for a in b.addresses}
         # desired MOS state per pack; cfet/dfet mirror the BMS, cl is tool-tracked
@@ -440,6 +462,14 @@ class Engine:
                 for s in self.sinks:
                     if hasattr(s, "set_availability"):
                         s.set_availability(key, online)
+        # Disabled buses: mark offline once (no warning – this is intended, not a fault).
+        for key in self._disabled:
+            if self._online.get(key) is not False:
+                self._online[key] = False
+                log.debug("%s deaktiviert (offline)", key)
+                for s in self.sinks:
+                    if hasattr(s, "set_availability"):
+                        s.set_availability(key, False)
 
     def _update_mos(self, readings) -> None:
         """Mirror CFET/DFET state from the status block and publish via MQTT."""
