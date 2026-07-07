@@ -130,6 +130,38 @@ def req_power_off(address: int) -> bytes:
     return build_frame(CID2_POWER_OFF, address, f"{address:02X}")
 
 
+def req_product_info(address: int) -> bytes:
+    """CID2 F1 – manufacturer/product info (manufacturer, model, firmware, serial)."""
+    return build_frame("F1", address, f"{address:02X}")
+
+
+@dataclass
+class ProductInfo:
+    manufacturer: str = ""
+    model: str = ""
+    version: str = ""
+    serial: str = ""
+
+
+def decode_product_info(resp: "Response") -> ProductInfo:
+    """Parse the F1 payload: a leading flag byte followed by 30-byte ASCII fields.
+    Observed on VK48150: [0]=manufacturer, [2]=model, [3]=firmware, [5]=serial."""
+    b = resp.info
+    def field(k: int) -> str:
+        start = 1 + 30 * k
+        return b[start:start + 30].decode("ascii", "replace").replace("\x00", "").strip()
+    fields = [field(k) for k in range(7)] if len(b) >= 31 else []
+    if not fields:
+        return ProductInfo()
+    model = fields[2] or (fields[4] if len(fields) > 4 else "")
+    return ProductInfo(
+        manufacturer=fields[0],
+        model=model,
+        version=fields[3] if len(fields) > 3 else "",
+        serial=fields[5] if len(fields) > 5 else "",
+    )
+
+
 # ---- value decoders -------------------------------------------------------
 def _u16(b: bytes, i: int) -> int:
     return (b[i] << 8) | b[i + 1]

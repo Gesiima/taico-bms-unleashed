@@ -50,6 +50,7 @@
   .pid{display:flex;flex-direction:column;justify-content:center;line-height:1}
   .pid b{color:var(--text);font:600 30px/1 var(--mono)}
   .pid .sub{font:11px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-top:5px}
+  .pid .pinfo{font:10.5px var(--mono);color:var(--dim);margin-top:3px}
   .badge{font:11px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;padding:5px 10px;border-radius:20px;border:1px solid currentColor}
   .badge.mode{min-width:92px;text-align:center}
   .badge.charge{color:var(--charge)} .badge.discharge{color:var(--discharge)} .badge.idle{color:var(--idle)}
@@ -166,7 +167,8 @@ function buildCard(p){
   let temps=""; NAMES.forEach(k=>{ temps+=`<div class="tt" data-temp="${k}" style="display:none"><div class="l">${TLABEL[k]}</div><div class="v"></div></div>`; });
   card.innerHTML=`
     <div class="ptop">
-      <div class="pid"><b>${p.bus||p.source||('Pack '+p.pack)}</b><span class="sub" data-sub></span></div>
+      <div class="pid"><b>${p.bus||p.source||('Pack '+p.pack)}</b><span class="sub" data-sub></span>
+        <span class="pinfo" data-info></span></div>
       <span class="badge mode"></span>
       <div class="mos">
         <button class="mosbtn" data-cfet><span>CFET</span> <i></i></button>
@@ -240,9 +242,17 @@ function updateCard(card,p,meta){
   cb.className="mosbtn "+(p.cfet==null?"unk":(p.cfet?"on":""));
   db.className="mosbtn "+(p.dfet==null?"unk":(p.dfet?"on":""));
   card._cfet=p.cfet; card._dfet=p.dfet;
+  // Produktinfo (grau): Modell · SN · FW — nur wenn vorhanden
+  const infoEl=card.querySelector("[data-info]");
+  const parts=[]; if(p.model)parts.push(p.model); if(p.serial)parts.push("SN "+p.serial); if(p.fw)parts.push("FW "+p.fw);
+  infoEl.textContent=parts.join(" · ");
+  // Power Off nur am Main-Pack; bei unklarem Main nur am primären Pack (für den Hinweis)
+  const showPwr = p.is_master || (!p.master_resolvable && meta && meta.primary);
+  card.querySelector("[data-pwr]").style.display = showPwr ? "" : "none";
   // Titel-Unterzeile + Pause (nur primäres Pack des Bus)
   if(meta){
-    card.querySelector("[data-sub]").textContent="Pack "+meta.idx+"/"+meta.total;
+    card.querySelector("[data-sub]").textContent="Pack "+meta.idx+"/"+meta.total
+      + (p.is_master ? " · Main (direkt angebunden)" : "");
     const pb=card.querySelector("[data-pause]");
     if(meta.primary){ pb.classList.remove("hidden"); pb.classList.toggle("on",!!meta.paused);
       pb.textContent=meta.paused?"Bus fortsetzen":"Bus pausieren"; }

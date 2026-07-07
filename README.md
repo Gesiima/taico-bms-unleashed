@@ -38,7 +38,8 @@ zurückentwickelt; Details in `VKING_BMS_Protokoll_Spezifikation.md`.
   Zoom erhalten. **Diagrammhöhe ziehbar** (Rand unten), Höhe pro Sitzung gemerkt.
 - Kompakte Legende mit Ein-/Ausblenden je Serie (gefülltes Kästchen = aktiv), Werten,
   die dem Cursor folgen (inkl. Cursor-Zeit), und **Hover-Highlight** (überfahrene Linie
-  hervorgehoben, Rest gedimmt).
+  hervorgehoben, Rest gedimmt). **„Alle aus/an"**-Schalter zum schnellen Filtern vieler
+  Linien und ein **Cursor-Tooltip** (Name + Wert der nächstliegenden Linie am Mauszeiger).
 - Kontrastreiche 16-Farben-Palette für die Zellen; Diagrammbreite folgt dem Browserfenster.
 - Verlustfreies Downsampling für große Zeiträume; SQLite-Index für schnelle Abfragen.
 
@@ -184,6 +185,24 @@ Bus-Name aus der Config, kleingeschrieben/ohne Leerzeichen, z. B. `bms1`). Damit
 `POST /api/log/clear` (alle Logdateien löschen), `GET /api/log/download?scope=current|all`
 (aktuelle Datei bzw. alle als ZIP), `GET/POST /api/config`, `POST /api/restart`.
 
+### Zugriff einschränken
+
+Zwei Ebenen, unabhängig voneinander:
+
+- **`web.host`** legt nur fest, an welche eigene Schnittstelle der Dienst bindet
+  (`0.0.0.0` = alle, `127.0.0.1` = nur lokal, oder eine feste eigene IP) — **nicht**, wer
+  zugreifen darf.
+- **`web.allow_networks`** (CIDR-Liste, in den Einstellungen editierbar) beschränkt die
+  erlaubten **Quell-Netze**, z. B. `192.168.2.0/24`. Leer = keine Einschränkung; localhost
+  ist immer erlaubt. Hinter einem Reverse-Proxy/WAF wird `X-Forwarded-For` nur ausgewertet,
+  wenn die Anfrage von einer in **`web.trusted_proxies`** eingetragenen IP kommt
+  (Spoofing-Schutz). Aus der XFF-Kette gilt die erste nicht-vertrauenswürdige Adresse als
+  echter Client (funktioniert auch mit verketteten Proxys).
+
+Für harte Absicherung bleibt zusätzlich **systemd** (`IPAddressAllow` in `deploy/vkbms.service`,
+z. B. `192.168.2.0/24`) bzw. Firewall/WAF die robustere Ebene — `allow_networks` ist eine
+bequeme, GUI-editierbare Zusatzschicht.
+
 ## FET-Schaltverhalten / BMS-Verriegelung
 
 - **CFET = Charge-FET** → steuert den **Lade**pfad.
@@ -202,6 +221,18 @@ erscheint dann der Hinweis „BMS hat das Schalten abgelehnt (unter Last nur der
 FET schaltbar)". Das ist **erwartetes Verhalten**, kein Fehler des Tools. Um einen FET
 unter Last zu öffnen, zuerst den Strom wegnehmen (Verbraucher/Ladequelle trennen bzw.
 Ruhezustand abwarten).
+
+**Power Off nur am Main-Pack.** Der Power-Off-Reset (EF) wirkt nur am direkt
+angebundenen Pack. Über den Adressbus angesprochene Sub-Packs können damit nicht
+zurückgesetzt werden. Pro Bus wird die **Main-Adresse** (genau ein Wert, Pflicht) und
+optional **Sub-Adressen** (weitere Packs) gesetzt; nur am Main-Pack ist der Power-Off-Button
+sichtbar (im Monitor mit „Main" gekennzeichnet). Ist die Main-Adresse nicht gesetzt, wird
+Power Off mit einem Hinweis blockiert.
+
+**Seriennummer/Produktinfo.** Modell, Firmware und Seriennummer werden je Pack einmalig
+über CID2 F1 ausgelesen und im Monitor als graue Zeile (z. B. „VK48150 · SN … · FW V15.53")
+angezeigt. Über MQTT werden sie einmalig (retained) unter `bms/<pack>/info/{manufacturer,
+model,version,serial}` veröffentlicht — nicht bei jedem Poll.
 
 ### Erfasste vs. noch offene Status-Flags
 
@@ -274,7 +305,7 @@ Steuerung unter `control/` (CFET/DFET), Temperaturen, Kennwerte und der Online-S
 
 ## Stand & Roadmap
 
-Aktuelle Version: **v0.13.0**. Änderungen je Release in `CHANGELOG.md`, geplante Punkte
+Aktuelle Version: **v0.14.0**. Änderungen je Release in `CHANGELOG.md`, geplante Punkte
 in `ROADMAP.md`.
 
 ## Mitwirkung / Attribution

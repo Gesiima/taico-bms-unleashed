@@ -62,8 +62,6 @@
 <div style="max-width:880px;margin:0 auto 60px;padding:0 18px">
   <button id="restartNow" style="font:12.5px var(--mono);background:transparent;color:var(--discharge);
     border:1px solid #f4a64855;border-radius:8px;padding:9px 16px;cursor:pointer">Dienst neu starten</button>
-  <a id="dbDownload" href="/api/db/download" style="font:12.5px var(--mono);background:var(--panel2);color:var(--charge);
-    border:1px solid #46d6a055;border-radius:8px;padding:9px 16px;cursor:pointer;text-decoration:none;margin-left:8px">Datenbank herunterladen</a>
 </div>
 
 <div class="bar" id="bar">
@@ -110,9 +108,10 @@ function render(){
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 2px">
     <a class="logbtn" href="/api/log/download?scope=current">Log herunterladen – aktuell</a>
     <a class="logbtn" href="/api/log/download?scope=all">Log herunterladen – alles (ZIP)</a>
-    <button class="logbtn danger" id="logClear" type="button">Log leeren (alles)</button>
+    <button class="logbtn danger" id="logClear" type="button">Log leeren</button>
   </div>
-  <div class="note">„Log leeren" löscht die aktuelle Datei und alle rotierten Tages-Backups.</div>`;
+  <div class="note">„Log herunterladen – alles" enthält die aktuelle Datei + die Log-History
+    (rotierte Tages-Logs). „Log leeren" löscht die aktuelle Datei und die gesamte Log-History.</div>`;
 
   h+=`<h2>DEBUG-Auto-Reset</h2><div class="grid">
     ${row("aktiv",field("debug_auto_reset.enabled",{type:"checkbox"}))}
@@ -121,10 +120,22 @@ function render(){
     automatisch auf INFO zurück – nur zur Laufzeit, die config.yaml bleibt unverändert.</div>`;
 
   h+=`<h2>Web</h2><div class="grid">
-    ${row("host",field("web.host"))}
+    ${row("Erreichbarkeit (host)",field("web.host"))}
     ${row("port",field("web.port",{type:"number"}))}
     ${row("Zugriffslogs",field("web.access_log",{type:"checkbox"}))}
-  </div>`;
+  </div>
+  <div class="note">host = an welche Schnittstelle der Server bindet:
+    <code>0.0.0.0</code> = im ganzen Netzwerk erreichbar · <code>127.0.0.1</code> = nur auf diesem Gerät ·
+    oder eine feste eigene IP des Servers. (Das legt <b>nicht</b> fest, wer zugreifen darf — dafür „Zugriff".)</div>
+
+  <h2>Zugriff (Quell-Netze)</h2><div class="grid">
+    ${row("Erlaubte Netze (CIDR, mit Komma)",`<input type="text" data-path="web.allow_networks" data-cidr="1" value="${((o.web&&o.web.allow_networks)||[]).join(", ")}">`)}
+    ${row("Vertrauenswürdige Proxys (CIDR)",`<input type="text" data-path="web.trusted_proxies" data-cidr="1" value="${((o.web&&o.web.trusted_proxies)||[]).join(", ")}">`)}
+  </div>
+  <div class="note">Leer = keine Einschränkung. Beispiel: <code>192.168.2.0/24</code>. localhost ist immer erlaubt.
+    <b>X-Forwarded-For</b> wird nur ausgewertet, wenn die Anfrage von einem hier eingetragenen
+    <b>vertrauenswürdigen Proxy</b> (z. B. Sophos XGS WAF) kommt — sonst zählt die direkte IP.
+    Robuster bleibt zusätzlich systemd (<code>IPAddressAllow</code>) bzw. Firewall/WAF.</div>`;
 
   h+=`<h2>BMS-Busse</h2>`;
   (o.buses||[]).forEach((b,i)=>{
@@ -140,7 +151,8 @@ function render(){
       ${row("Name",field("buses."+i+".name"))}
       ${row("Typ",field("buses."+i+".connection.type",{type:"select",options:["tcp","serial"]}))}
       ${conn}
-      ${row("Adressen (z.B. 1, 2)",`<input type="text" data-path="buses.${i}.addresses" data-list="1" value="${(b.addresses||[]).join(", ")}">`)}
+      ${row("Main-Adresse (direkt angebunden, Pflicht)",`<input type="number" data-path="buses.${i}.main_address" value="${(b.main_address!=null)?b.main_address:((b.addresses&&b.addresses[0])!=null?b.addresses[0]:'')}">`)}
+      ${row("Sub-Adressen (weitere Packs, mit Komma)",`<input type="text" data-path="buses.${i}.sub_addresses" data-list="1" value="${(b.sub_addresses!=null?b.sub_addresses:((b.addresses||[]).slice(1))).join(", ")}">`)}
       ${row("Timeout (s)",field("buses."+i+".timeout",{type:"number"}))}
       ${row("Status/Alarm lesen",`<input type="checkbox" data-path="buses.${i}.read_status" ${b.read_status===false?'':'checked'}>`)}
       ${row("Log-Level (Bus)",`<select data-path="buses.${i}.log_level"><option value=""${!b.log_level?' selected':''}>— (global)</option>${["DEBUG","INFO","WARNING","ERROR"].map(o=>`<option ${o===b.log_level?'selected':''}>${o}</option>`).join("")}</select>`)}
@@ -153,7 +165,8 @@ function render(){
     ${row("aktiv",field("output.sqlite.enabled",{type:"checkbox"}))}
     ${row("Pfad",field("output.sqlite.path"))}
     ${row("retention_days (0=aus)",field("output.sqlite.retention_days",{type:"number"}))}
-  </div>`;
+  </div>
+  <div style="margin:10px 0 2px"><a class="logbtn" href="/api/db/download">Datenbank herunterladen</a></div>`;
 
   h+=`<h2>CSV</h2><div class="grid">
     ${row("aktiv",field("output.csv.enabled",{type:"checkbox"}))}
@@ -177,6 +190,7 @@ function render(){
     el.addEventListener(ev,()=>{
       let v;
       if(el.type==="checkbox") v=el.checked;
+      else if(el.dataset.cidr) v=el.value.split(",").map(x=>x.trim()).filter(x=>x);
       else if(el.dataset.list) v=el.value.split(",").map(x=>parseInt(x.trim())).filter(x=>!isNaN(x));
       else if(el.type==="number") v=el.value===""?null:Number(el.value);
       else v=el.value;
@@ -186,14 +200,14 @@ function render(){
   });
   const add=document.getElementById("addbus");
   if(add) add.onclick=()=>{ (CFG.buses=CFG.buses||[]).push(
-    {name:"BMS "+(CFG.buses.length+1),enabled:true,connection:{type:"tcp",host:"192.168.2.221",port:9999},addresses:[CFG.buses.length+1],timeout:1.0});
+    {name:"BMS "+(CFG.buses.length+1),enabled:true,connection:{type:"tcp",host:"192.168.2.221",port:9999},main_address:1,sub_addresses:[],timeout:1.0});
     render(); dirty(); };
   m.querySelectorAll(".rmbus").forEach(btn=>btn.onclick=()=>{
     if(!confirm("Diesen Bus entfernen?")) return;
     CFG.buses.splice(+btn.dataset.i,1); render(); dirty(); });
   const lc=document.getElementById("logClear");
   if(lc) lc.onclick=async()=>{
-    if(!confirm("Alle Logdateien (aktuell + rotierte Backups) löschen?")) return;
+    if(!confirm("Aktuelle Logdatei und die gesamte Log-History löschen?")) return;
     try{
       const r=await (await fetch("/api/log/clear",{method:"POST"})).json();
       alert(r.ok ? ("Log geleert ("+r.removed+" Datei(en)).") : ("Fehler: "+(r.error||"unbekannt")));

@@ -2,6 +2,37 @@
 
 Format: neueste Version oben. Versionierung: MAJOR.MINOR.PATCH.
 
+## [0.14.0] — 2026-07-06
+### Hinzugefügt
+- **Main-/Sub-Adressierung**: pro Bus eine **Main-Adresse** (Pflicht, genau ein direkt
+  angebundenes Pack) und optionale **Sub-Adressen** (weitere Packs über den Adressbus).
+  Ersetzt die bisherige Adressliste + Master-Feld; alte Configs (`addresses`/`master_address`)
+  funktionieren als Fallback weiter.
+- **Power-Off-Sperre**: Power Off ist nur am Main-Pack möglich; im Monitor erscheint der
+  Button nur dort (Sub-Packs nie), das Main-Pack ist mit „Main" gekennzeichnet. Main nicht
+  gesetzt → Hinweis; abgelehnte Versuche werden mit Quelle (Web/MQTT) geloggt.
+- **Seriennummer/Produktinfo**: Modell, Firmware und Seriennummer werden je Pack einmalig
+  über CID2 F1 gelesen, im Monitor als graue Zeile angezeigt und einmalig (retained) über
+  MQTT unter `bms/<pack>/info/{manufacturer,model,version,serial}` veröffentlicht.
+- **Zugriffsbeschränkung nach Quell-Netz**: `web.allow_networks` (CIDR-Liste) und
+  `web.trusted_proxies`; nicht erlaubte IPs erhalten 403, localhost immer erlaubt.
+  `X-Forwarded-For` wird nur von vertrauenswürdigen Proxys ausgewertet (Spoofing-Schutz,
+  proxy-neutral). Editierbar in den Einstellungen; systemd/Firewall bleibt die robustere Ebene.
+- **Chart „Alle aus/an"**: blendet alle Serien mit einem Klick aus/ein — schnelles Filtern
+  einzelner Linien bei vielen Kurven.
+- **Chart Cursor-Tooltip**: Name + Wert der nächstliegenden Linie direkt am Mauszeiger.
+### Geändert
+- **DB-Download** aus der Kopfleiste in den SQLite-Abschnitt der Einstellungen verschoben.
+- Begriff **„Log-History"** in UI/Doku (statt „rotierte Backups").
+- **host-Feld** in den Einstellungen mit Hilfetext (Bindung ≠ Zugriffsrecht).
+
+## [0.13.1] — 2026-07-06
+### Behoben
+- Verlauf/Chart blieb leer, obwohl die Datenbank Daten enthielt: eine einzelne Zeile
+  mit `NULL` (z. B. rund um einen Power-Off/Reset geschrieben) ließ die komplette
+  `/api/history`-Abfrage mit einem Fehler abbrechen. Die Mittelwertbildung ist jetzt
+  `NULL`-sicher — fehlende Einzelwerte werden ignoriert bzw. als Lücke dargestellt.
+
 ## [0.13.0] — 2026-07-06
 ### Hinzugefügt
 - **Einstellungs-Seite vervollständigt**: alle bisher fehlenden `config.yaml`-Optionen

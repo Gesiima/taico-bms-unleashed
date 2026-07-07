@@ -40,6 +40,14 @@
     border:1px solid var(--line);border-radius:7px;padding:6px 9px}
   /* eigene, kompakte Legende */
   #legtime{font:11px var(--mono);color:var(--charge);margin-top:12px;height:14px}
+  #legtools{display:flex;align-items:center;gap:12px;margin-top:12px}
+  #legtools button{font:11px var(--mono);background:var(--panel2);color:var(--text);
+    border:1px solid var(--line);border-radius:7px;padding:5px 12px;cursor:pointer}
+  #legtools .hint{font:11px var(--mono);color:var(--dim)}
+  .uplot .u-over .tip{position:absolute;pointer-events:none;transform:translate(-50%,-140%);
+    background:#0d1a1de6;border:1px solid var(--line);border-radius:6px;padding:4px 8px;
+    font:11px var(--mono);white-space:nowrap;z-index:20;display:none}
+  .uplot .u-over .tip b{color:#fff}
   .legend{display:flex;flex-wrap:wrap;gap:5px 14px;margin-top:6px}
   #chartdrag{margin-top:6px;text-align:center;font:11px var(--mono);letter-spacing:.15em;
     color:var(--dim);border:1px solid var(--line);border-radius:7px;padding:5px;cursor:ns-resize;
@@ -92,6 +100,8 @@
       <div id="chart"></div>
     </div>
     <div id="chartdrag" title="Diagrammhöhe ziehen">≡ Höhe ziehen</div>
+    <div id="legtools"><button id="allToggle" type="button">Alle aus</button>
+      <span class="hint">Tipp: „Alle aus" und dann einzelne Linien einblenden</span></div>
     <div id="legtime"></div>
     <div id="legend" class="legend"></div>
     <div class="hint">Ziehen = zoomen · Doppelklick oder „Zoom reset" = Vollansicht · Höhe über die Leiste „Höhe ziehen" unter dem Chart anpassen · Zellen links (mV), Spannung/Strom rechts, SOC 0–100 (ohne Achse).</div>
@@ -144,7 +154,7 @@ function makeChart(){
           const el=document.getElementById("sel"); if(el) el.textContent="Auswahl: "+f(a)+" – "+f(b);
         }
       }],
-      setCursor:[u=>updateLegendValues(u.cursor.idx)],
+      setCursor:[u=>{ updateLegendValues(u.cursor.idx); updateTip(u); }],
       setData:[u=>updateLegendValues(null)]
     },
     series
@@ -189,6 +199,37 @@ function buildLegend(){
     el.onmouseleave=()=>{ if(chart) chart.setSeries(null,{focus:false}); };
     box.appendChild(el);
   }
+}
+// Alle Serien mit einem Klick aus-/einblenden (schnelles Filtern bei vielen Linien)
+function toggleAll(){
+  if(!chart) return;
+  const anyOn=chart.series.slice(1).some(s=>s.show);
+  const target=!anyOn;                  // etwas an -> alles aus; alles aus -> alles an
+  for(let si=1; si<chart.series.length; si++) chart.setSeries(si,{show:target});
+  document.querySelectorAll("#legend .lg").forEach(el=>el.classList.toggle("off",!target));
+  const b=document.getElementById("allToggle"); if(b) b.textContent=target?"Alle aus":"Alle an";
+}
+const UNIT={mv:"mV",v:"V",a:"A",soc:"%"};
+function updateTip(u){
+  let tip=u.over.querySelector(".tip");
+  if(!tip){ tip=document.createElement("div"); tip.className="tip"; u.over.appendChild(tip); }
+  const {idx,left,top}=u.cursor;
+  if(idx==null || left<0 || top<0){ tip.style.display="none"; return; }
+  // nächstliegende sichtbare Serie zum Mauszeiger bestimmen
+  let best=null, bestD=Infinity;
+  for(let si=1; si<u.series.length; si++){
+    if(!u.series[si].show) continue;
+    const v=u.data[si][idx];
+    if(v==null || isNaN(v)) continue;
+    const y=u.valToPos(v, u.series[si].scale);
+    const d=Math.abs(y-top);
+    if(d<bestD){ bestD=d; best=si; }
+  }
+  if(best==null){ tip.style.display="none"; return; }
+  const v=u.data[best][idx];
+  const unit=UNIT[u.series[best].scale]||"";
+  tip.innerHTML=`<span style="color:${COLORS[best-1]}">${LABELS[best-1]}</span>: <b>${Number(v).toFixed(DEC[best-1])} ${unit}</b>`;
+  tip.style.left=left+"px"; tip.style.top=top+"px"; tip.style.display="";
 }
 function updateLegendValues(idx){
   if(!chart) return;
@@ -269,6 +310,7 @@ async function init(){
   document.querySelectorAll("#modes .seg").forEach(b=>b.onclick=()=>setMode(b.dataset.live));
   document.getElementById("load").onclick=()=>{ resetZoom(); loadData(); };
   document.getElementById("reset").onclick=resetZoom;
+  document.getElementById("allToggle").onclick=toggleAll;
   setMode(0);
 }
 init();

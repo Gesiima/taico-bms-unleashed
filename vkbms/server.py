@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import ipaddress
 import sqlite3
 import threading
 import time
@@ -74,6 +75,15 @@ def _background_loop(cfg: dict, stop: threading.Event) -> None:
         d["pack_key"] = key
         bus_addr = _engine._pack_map.get(key)
         d["bus"] = bus_addr[0].name if bus_addr else ""
+        # Power Off only on the directly-wired main pack; expose flags to the UI.
+        master_addr = _engine._bus_master.get(d["bus"])
+        d["is_master"] = key in _engine._master_keys
+        d["master_resolvable"] = master_addr is not None
+        d["can_poweroff"] = (master_addr is None) or d["is_master"]
+        info = _engine._product.get(key) or {}
+        d["serial"] = info.get("serial", "")
+        d["model"] = info.get("model", "")
+        d["fw"] = info.get("version", "")
         d["warnings"] = status.warnings if status else []
         d["protections"] = status.protections if status else []
         with _state_lock:
@@ -122,12 +132,19 @@ def _query_history(source: str, since_iso: str, until_iso: str | None,
         bucket = rows[i:i + step]
         mid = bucket[len(bucket) // 2]
         out["time"].append(mid[0])
-        n = len(bucket)
-        out["voltage_v"].append(round(sum(r[1] for r in bucket) / n, 2))
-        out["current_a"].append(round(sum(r[2] for r in bucket) / n, 2))
-        out["soc"].append(round(sum((r[3] or 0) for r in bucket) / n))
+        # NULL-safe averaging: a single NULL value (e.g. a row written around a
+        # Power Off/reset) must not break the whole history request. Missing
+        # values are ignored; an all-empty bucket yields None (a gap in the chart).
+        def _avg(idx, ndigits=None):
+            xs = [r[idx] for r in bucket if r[idx] is not None]
+            if not xs:
+                return None
+            return round(sum(xs) / len(xs), ndigits) if ndigits else round(sum(xs) / len(xs))
+        out["voltage_v"].append(_avg(1, 2))
+        out["current_a"].append(_avg(2, 2))
+        out["soc"].append(_avg(3))
         for j, k in enumerate(CELL_KEYS):
-            out[k].append(round(sum(r[4 + j] for r in bucket) / n))
+            out[k].append(_avg(4 + j))
     return out
 
 
@@ -166,6 +183,52 @@ def create_app(cfg: dict):
     here = os.path.dirname(os.path.abspath(__file__))
     web_dir = os.path.join(here, "web")
     app = Flask(__name__, static_folder=None)
+
+    # ---- Zugriffsbeschränkung nach Quell-Netz (optionale App-Schicht) --------
+    # Robuster ist weiterhin systemd (IPAddressAllow) bzw. Firewall/WAF; dies ist
+    # eine bequeme, GUI-editierbare Zusatzschicht.
+    def _in_nets(ip, nets):
+        try:
+            a = ipaddress.ip_address(ip)
+        except ValueError:
+            return False
+        for n in nets:
+            try:
+                if a in ipaddress.ip_network(str(n).strip(), strict=False):
+                    return True
+            except ValueError:
+                continue
+        return False
+
+    def _client_ip():
+        """Real client IP. X-Forwarded-For is only trusted when the direct peer is
+        a configured trusted proxy (anti-spoofing); then walk the chain from the
+        right and take the first address that is not itself a trusted proxy."""
+        from flask import request
+        remote = request.remote_addr or ""
+        tp = (_cfg.get("web", {}) or {}).get("trusted_proxies", []) or []
+        if tp and _in_nets(remote, tp):
+            chain = [p.strip() for p in
+                     request.headers.get("X-Forwarded-For", "").split(",") if p.strip()]
+            for ip in reversed(chain):
+                if not _in_nets(ip, tp):
+                    return ip
+            return chain[0] if chain else remote
+        return remote
+
+    @app.before_request
+    def _access_guard():
+        from flask import request
+        allow = (_cfg.get("web", {}) or {}).get("allow_networks", []) or []
+        if not allow:
+            return None                      # keine Einschränkung konfiguriert
+        ip = _client_ip()
+        if _in_nets(ip, ["127.0.0.1/32", "::1/128"]):
+            return None                      # localhost immer erlaubt (kein Aussperren)
+        if _in_nets(ip, allow):
+            return None
+        log.warning("Zugriff verweigert für %s (nicht in allow_networks)", ip)
+        return ("Zugriff verweigert (IP nicht freigegeben)", 403)
 
     def _page(name):
         with open(os.path.join(web_dir, name), "r", encoding="utf-8") as f:

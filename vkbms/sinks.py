@@ -158,6 +158,7 @@ class MqttSink:
         #   _seen = pack keys we have already published control state for; retained
         #   startup values for unseen packs are ignored (no accidental switching).
         self._seen = set()
+        self._info_pub = set()        # packs whose static product info was published
 
         # paho-mqtt 2.x requires an explicit callback API version; fall back to 1.x
         try:
@@ -225,6 +226,19 @@ class MqttSink:
 
     def set_command_callback(self, cb) -> None:
         self._cmd_cb = cb
+
+    def publish_info(self, pack_key: str, info: dict) -> None:
+        """Publish static product info once per pack (retained). Called by the engine
+        when the info is first read; retained delivery covers later (re)connects."""
+        if pack_key in self._info_pub:
+            return
+        self._info_pub.add(pack_key)
+        base = f"{self.base}/{pack_key}/info"
+        try:
+            for k in ("manufacturer", "model", "version", "serial"):
+                self.client.publish(f"{base}/{k}", info.get(k, ""), retain=True)
+        except Exception as e:  # noqa: BLE001
+            log.warning("mqtt info publish failed: %s", e)
 
     def write(self, r: AnalogReading) -> None:
         d = reading_to_dict(r)

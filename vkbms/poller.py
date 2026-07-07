@@ -77,6 +77,7 @@ class Bus:
     lock: threading.Lock = field(default_factory=threading.Lock)  # serialize socket use
     logger: logging.Logger = field(default_factory=lambda: log)   # per-bus child logger
     debug_raw: bool = False                                       # log full TX/RX hex frames
+    master_address: Optional[int] = None    # directly-wired pack (only it may Power Off)
 
 
 def _hex(data) -> str:
@@ -135,15 +136,39 @@ def build_buses(cfg: dict) -> list[Bus]:
         lvl = b.get("log_level")
         if lvl:
             blog.setLevel(str(lvl).upper())
+        ma = b.get("master_address")
+        try:
+            ma = int(ma) if ma not in (None, "") else None
+        except (TypeError, ValueError):
+            ma = None
+        # New model: main_address (single, required) + sub_addresses (optional, many).
+        # Legacy fallback: addresses[] (+ master_address) for configs not yet re-saved.
+        main = b.get("main_address")
+        try:
+            main = int(main) if main not in (None, "") else None
+        except (TypeError, ValueError):
+            main = None
+        if main is not None:
+            subs = [a for a in _parse_addresses(b.get("sub_addresses", []) or []) if a != main]
+            addresses = [main] + subs
+            master = main
+        else:
+            addresses = _parse_addresses(b.get("addresses", []) or [])
+            master = ma
+        if not addresses:
+            logging.getLogger("vkbms.poller").warning(
+                "Bus '%s' ohne Adresse (main_address fehlt) – übersprungen", name)
+            continue
         buses.append(Bus(
             name=name,
             transport=make_transport(b["connection"]),
-            addresses=_parse_addresses(b["addresses"]),
+            addresses=addresses,
             label=b.get("label", name),
             read_status=bool(b.get("read_status", True)),
             timeout=float(b.get("timeout", 1.0)),
             logger=blog,
             debug_raw=bool(b.get("debug_raw_frames", False)),
+            master_address=master,
         ))
     return buses
 
@@ -248,10 +273,21 @@ class Engine:
         self._pack_map = {pack_key(b, a): (b, a) for b in self.buses for a in b.addresses}
         # desired MOS state per pack; cfet/dfet mirror the BMS, cl is tool-tracked
         self.mos = {k: {"cfet": None, "dfet": None, "cl": False} for k in active}
+        # Master pack (directly wired) per bus: only it may Power Off.
+        # Effective master = configured master_address, or the sole address on a
+        # single-pack bus, else None (multi-pack bus without master configured).
+        def _eff_master(b):
+            if b.master_address is not None:
+                return b.master_address if b.master_address in b.addresses else None
+            return b.addresses[0] if len(b.addresses) == 1 else None
+        self._bus_master = {b.name: _eff_master(b) for b in self.buses}
+        self._master_keys = {pack_key(b, self._bus_master[b.name]) for b in self.buses
+                             if self._bus_master[b.name] is not None}
         # Power-Off-Nachlauf: erwartetes Offline direkt nach einem Power Off nicht
         # als WARNING, sondern als erwartet loggen (Fenster in Sekunden).
         self._po_grace = {}           # pack_key -> monotonic deadline
         self._po_offline = set()      # packs currently offline due to a power off
+        self._product = {}            # pack_key -> {manufacturer,model,version,serial}
         # DEBUG-Auto-Reset (nur Laufzeit): erhoehtes Logging nach X Minuten zuruecksetzen
         self._debug_timer = None
         self._schedule_debug_auto_reset(cfg)
@@ -323,7 +359,32 @@ class Engine:
                 results.extend(fut.result())
             except Exception as e:  # noqa: BLE001
                 log.warning("bus poll failed: %s", e)
+        # Static product info (serial/model/firmware): fetch once per pack, then cache.
+        for analog, _ in results:
+            if analog.pack_key not in self._product:
+                bus, addr = self._pack_map.get(analog.pack_key, (None, None))
+                if bus is not None:
+                    self._fetch_product(bus, addr, analog.pack_key)
         return results
+
+    def _fetch_product(self, bus, addr, key) -> None:
+        try:
+            with bus.lock:
+                resp = P.parse_frame(bus.transport.query(P.req_product_info(addr), bus.timeout))
+            if not resp.ok:
+                return
+            pi = P.decode_product_info(resp)
+        except (TransportError, P.ProtocolError, IndexError) as e:
+            bus.logger.debug("[%s] pack %d product info failed: %s", bus.name, addr, e)
+            return
+        info = {"manufacturer": pi.manufacturer, "model": pi.model,
+                "version": pi.version, "serial": pi.serial}
+        self._product[key] = info
+        bus.logger.info("Produktinfo %s: %s SN %s FW %s",
+                        key, pi.model or "?", pi.serial or "?", pi.version or "?")
+        for s in self.sinks:                 # einmalig (retained) an MQTT melden
+            if hasattr(s, "publish_info"):
+                s.publish_info(key, info)
 
     def pause_bus(self, name: str, paused: bool) -> dict:
         """Pause/resume polling of a bus at runtime; paused frees the connection."""
@@ -444,6 +505,24 @@ class Engine:
         if pack_key not in self._pack_map:
             return {"ok": False, "error": f"unbekannter Pack {pack_key}"}
         bus, addr = self._pack_map[pack_key]
+        # Power Off (EF) only works on the directly-wired master pack.
+        if bus.master_address is None:
+            msg = ("Master-Pack nicht konfiguriert – bitte für diesen Bus die "
+                   "master_address (direkt angebundenes Pack) in den Einstellungen setzen.")
+            log.warning("Power Off abgelehnt für %s: nicht konfiguriert [Quelle: %s]", pack_key, source)
+            return {"ok": False, "error": msg, "code": "no_master"}
+        if bus.master_address not in bus.addresses:
+            msg = (f"Konfiguriertes Master-Pack (Adresse {bus.master_address}) ist auf "
+                   f"Bus '{bus.name}' nicht vorhanden - bitte master_address korrigieren.")
+            log.warning("Power Off abgelehnt für %s: Master-Adresse %s nicht am Bus [Quelle: %s]",
+                        pack_key, bus.master_address, source)
+            return {"ok": False, "error": msg, "code": "master_missing"}
+        if addr != bus.master_address:
+            msg = ("Power Off ist nur am Master-Pack (direkt angebunden) möglich, nicht an "
+                   "einem über den Adressbus angesprochenen Sub-Pack.")
+            log.warning("Power Off abgelehnt für %s: kein Master (Master=Adr %s) [Quelle: %s]",
+                        pack_key, bus.master_address, source)
+            return {"ok": False, "error": msg, "code": "not_master"}
         try:
             with bus.lock:
                 bus.transport.query(P.req_power_off(addr), bus.timeout)

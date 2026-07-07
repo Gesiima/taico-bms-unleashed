@@ -30,17 +30,23 @@ web:
   host: 0.0.0.0           # 0.0.0.0 = auch im Netz erreichbar; 127.0.0.1 = nur lokal
   port: 8080              # http://localhost:8080
   access_log: false       # HTTP-Zugriffslogs (GET ... 200) ausblenden (true zum Debuggen)
+  # Optionale Zugriffsbeschraenkung nach Quell-Netz (App-Schicht; robuster bleibt
+  # systemd IPAddressAllow bzw. Firewall/WAF). Leer = keine Einschraenkung.
+  allow_networks: []      # z. B. [192.168.2.0/24]; localhost ist immer erlaubt
+  trusted_proxies: []     # nur von diesen IPs/Netzen wird X-Forwarded-For ausgewertet
+  #                       # (z. B. die interne IP der Sophos XGS WAF)
 
-# One or more buses. A bus = one connection carrying one or more pack
-# addresses. Only the addresses listed here are polled (directly), so missing
-# packs never slow things down.
+# One or more buses. A bus = one connection carrying one or more pack addresses.
+# main_address = the directly-wired pack (required, exactly one) -- only this pack can
+# Power Off. sub_addresses = further packs reached over the address bus (optional, many).
 buses:
   - name: main
     connection:
       type: tcp           # "tcp" (gateway) or "serial" (COM port)
       host: 192.168.1.50  # <-- IP of your RS232/485-Ethernet gateway
       port: 9999          # netport1 -> Uart 1 (TCP Server). Max Accept = 1!
-    addresses: [1, 2]     # the pack addresses on this bus (see parameter #1 per pack)
+    main_address: 1       # directly-wired pack (required) -> Power Off only here
+    sub_addresses: [2]    # optional further packs on the same line (e.g. [2, 3])
     read_status: true     # also poll the status/alarm block (CID2 44)
     timeout: 1.0
     # Per-bus diagnostics (optional):
@@ -54,7 +60,7 @@ buses:
   #     type: serial
   #     port: COM1        # on Linux e.g. /dev/ttyUSB0
   #     baudrate: 9600
-  #   addresses: [1]
+  #   main_address: 1
 
 output:
   sqlite:
