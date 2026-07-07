@@ -2,6 +2,19 @@
 
 Format: neueste Version oben. Versionierung: MAJOR.MINOR.PATCH.
 
+## [0.14.3] — 2026-07-07
+### Hinzugefügt
+- **Balancing im Verlauf**: aktives Zell-Balancing wird als Punkte auf der jeweiligen
+  Zell-Linie dargestellt. `/api/history` liefert dazu die je Zeit-Bucket ODER-verknüpfte
+  Balancing-Maske (kurze Phasen gehen beim Downsampling nicht verloren).
+### Behoben
+- **Cursor-Tooltip** wurde nie sichtbar: zum Einblenden wurde `display=""` gesetzt, wodurch
+  die CSS-Regel `display:none` wieder griff. Jetzt `display:"block"`.
+- **SOC-Skala nach Zoom-Reset**: „Zoom reset" setzt die SOC-Skala wieder auf feste 0–100
+  (vorher blieb sie nach vertikalem Zoom verstellt bis zum Neuladen der Seite).
+### Geändert
+- Monitor-Label des direkt angebundenen Packs von „Main (direkt angebunden)" auf „Main" gekürzt.
+
 ## [0.14.2] — 2026-07-07
 ### Geändert
 - **Produktinfo (Modell · SN · FW)** wird nicht mehr als eigene Zeile unter dem Titel

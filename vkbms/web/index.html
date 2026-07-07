@@ -253,7 +253,7 @@ function updateCard(card,p,meta){
   // Titel-Unterzeile + Pause (nur primäres Pack des Bus)
   if(meta){
     card.querySelector("[data-sub]").textContent="Pack "+meta.idx+"/"+meta.total
-      + (p.is_master ? " · Main (direkt angebunden)" : "");
+      + (p.is_master ? " · Main" : "");
     const pb=card.querySelector("[data-pause]");
     if(meta.primary){ pb.classList.remove("hidden"); pb.classList.toggle("on",!!meta.paused);
       pb.textContent=meta.paused?"Bus fortsetzen":"Bus pausieren"; }

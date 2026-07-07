@@ -113,7 +113,7 @@ def _query_history(source: str, since_iso: str, until_iso: str | None,
     if not path or not os.path.exists(path):
         return {"time": []}
     con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
-    cols = "time,voltage_v,current_a,soc," + ",".join(CELL_KEYS)
+    cols = "time,voltage_v,current_a,soc," + ",".join(CELL_KEYS) + ",balance_mask"
     q = f"SELECT {cols} FROM readings WHERE source=? AND time>=?"
     args = [source, since_iso]
     if until_iso:
@@ -123,15 +123,22 @@ def _query_history(source: str, since_iso: str, until_iso: str | None,
     con.close()
     if not rows:
         return {"time": []}
+    bal_idx = 4 + len(CELL_KEYS)   # column index of balance_mask in each row
     # downsample by bucket-averaging to at most max_points
     step = max(1, len(rows) // max_points)
-    out = {"time": [], "voltage_v": [], "current_a": [], "soc": []}
+    out = {"time": [], "voltage_v": [], "current_a": [], "soc": [], "balance_mask": []}
     for k in CELL_KEYS:
         out[k] = []
     for i in range(0, len(rows), step):
         bucket = rows[i:i + step]
         mid = bucket[len(bucket) // 2]
         out["time"].append(mid[0])
+        # OR-aggregate the balancing mask so short balancing phases survive downsampling
+        mask = 0
+        for r in bucket:
+            if r[bal_idx] is not None:
+                mask |= int(r[bal_idx])
+        out["balance_mask"].append(mask)
         # NULL-safe averaging: a single NULL value (e.g. a row written around a
         # Power Off/reset) must not break the whole history request. Missing
         # values are ignored; an all-empty bucket yields None (a gap in the chart).

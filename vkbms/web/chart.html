@@ -112,6 +112,14 @@
 const CELLS=[...Array(16)].map((_,i)=>"v"+String(i+1).padStart(2,"0"));
 let chart=null, live=0, timer=null, source="", zoomed=false;
 const COLORS=[]; const LABELS=[]; const DEC=[];   // per series (1..18)
+let BAL=[];   // per x-index OR-aggregated balancing mask (bit0 = Zelle 1)
+// zeigt Punkte nur an den Zeitpunkten, an denen DIESE Zelle balanciert hat
+function balancePoints(si,i0,i1){
+  if(si<1 || si>16) return null;           // nur Zell-Serien
+  const bit=si-1, out=[];
+  for(let i=i0;i<=i1;i++){ const m=BAL[i]; if(m!=null && ((m>>bit)&1)) out.push(i); }
+  return out.length?out:null;
+}
 
 const CELL_PALETTE=["#f25f5f","#ed7126","#f2cd5f","#d4ed26","#a8f25f","#3fed26",
   "#5ff283","#26eda3","#5ff2f2","#26a3ed","#7b99f4","#715ff2","#b87bf4","#d426ed",
@@ -123,7 +131,8 @@ function cWidth(){ const el=document.getElementById("chart");
 
 function makeChart(){
   const series=[{}];
-  CELLS.forEach((k,i)=>{ series.push({label:k.toUpperCase(),scale:"mv",stroke:cellColor(i),width:1,points:{show:false}});
+  CELLS.forEach((k,i)=>{ series.push({label:k.toUpperCase(),scale:"mv",stroke:cellColor(i),width:1,
+    points:{show:(u,si,i0,i1)=>balancePoints(si,i0,i1), size:6}});
     COLORS.push(cellColor(i)); LABELS.push(k.toUpperCase()); DEC.push(0); });
   series.push({label:"Spannung V",scale:"v",stroke:"#46d6a0",width:2,points:{show:false}});
   COLORS.push("#46d6a0"); LABELS.push("Spannung"); DEC.push(2);
@@ -229,7 +238,7 @@ function updateTip(u){
   const v=u.data[best][idx];
   const unit=UNIT[u.series[best].scale]||"";
   tip.innerHTML=`<span style="color:${COLORS[best-1]}">${LABELS[best-1]}</span>: <b>${Number(v).toFixed(DEC[best-1])} ${unit}</b>`;
-  tip.style.left=left+"px"; tip.style.top=top+"px"; tip.style.display="";
+  tip.style.left=left+"px"; tip.style.top=top+"px"; tip.style.display="block";
 }
 function updateLegendValues(idx){
   if(!chart) return;
@@ -246,7 +255,8 @@ function updateLegendValues(idx){
 function resetZoom(){
   zoomed=false;
   const el=document.getElementById("sel"); if(el) el.textContent="";
-  if(chart){ ["x","mv","v","a"].forEach(s=>chart.setScale(s,{min:null,max:null})); }
+  if(chart){ ["x","mv","v","a"].forEach(s=>chart.setScale(s,{min:null,max:null}));
+    chart.setScale("soc",{min:0,max:100}); }   // SOC zurück auf feste Range
 }
 
 async function loadData(){
@@ -264,6 +274,7 @@ async function loadData(){
     const data=[xs];
     CELLS.forEach(k=>data.push(d[k]||[]));
     data.push(d.voltage_v||[]); data.push(d.current_a||[]); data.push(d.soc||[]);
+    BAL = d.balance_mask||[];   // Balancing-Marker je Zelle
     // Zoom im Live-Modus bewahren
     let keep=null;
     if(live>0 && zoomed && chart){ const sc=chart.scales; keep={x:[sc.x.min,sc.x.max],mv:[sc.mv.min,sc.mv.max],v:[sc.v.min,sc.v.max],a:[sc.a.min,sc.a.max]}; }
