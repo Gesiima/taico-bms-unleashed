@@ -104,7 +104,7 @@
       <span class="hint">Tipp: „Alle aus" und dann einzelne Linien einblenden</span></div>
     <div id="legtime"></div>
     <div id="legend" class="legend"></div>
-    <div class="hint">Ziehen = zoomen · Doppelklick oder „Zoom reset" = Vollansicht · Höhe über die Leiste „Höhe ziehen" unter dem Chart anpassen · Zellen links (mV), Spannung/Strom rechts, SOC 0–100 (ohne Achse).</div>
+    <div class="hint">Ziehen = zoomen · Shift+Ziehen = verschieben · Doppelklick oder „Zoom reset" = Vollansicht · Höhe über die Leiste „Höhe ziehen" unter dem Chart anpassen · Zellen links (mV), Spannung/Strom rechts, SOC 0–100 (ohne Achse).</div>
   </div>
 </main>
 <script src="/vendor/uPlot.iife.min.js"></script>
@@ -113,12 +113,12 @@ const CELLS=[...Array(16)].map((_,i)=>"v"+String(i+1).padStart(2,"0"));
 let chart=null, live=0, timer=null, source="", zoomed=false;
 const COLORS=[]; const LABELS=[]; const DEC=[];   // per series (1..18)
 let BAL=[];   // per x-index OR-aggregated balancing mask (bit0 = Zelle 1)
-// zeigt Punkte nur an den Zeitpunkten, an denen DIESE Zelle balanciert hat
-function balancePoints(si,i0,i1){
+// liefert die Indizes, an denen DIESE Zelle balanciert hat (für points.filter)
+function balanceFilter(si){
   if(si<1 || si>16) return null;           // nur Zell-Serien
   const bit=si-1, out=[];
-  for(let i=i0;i<=i1;i++){ const m=BAL[i]; if(m!=null && ((m>>bit)&1)) out.push(i); }
-  return out.length?out:null;
+  for(let i=0;i<BAL.length;i++){ if((BAL[i]>>bit)&1) out.push(i); }
+  return out;
 }
 
 const CELL_PALETTE=["#f25f5f","#ed7126","#f2cd5f","#d4ed26","#a8f25f","#3fed26",
@@ -132,7 +132,7 @@ function cWidth(){ const el=document.getElementById("chart");
 function makeChart(){
   const series=[{}];
   CELLS.forEach((k,i)=>{ series.push({label:k.toUpperCase(),scale:"mv",stroke:cellColor(i),width:1,
-    points:{show:(u,si,i0,i1)=>balancePoints(si,i0,i1), size:6}});
+    points:{show:true, size:6, filter:(u,si)=>balanceFilter(si)}});
     COLORS.push(cellColor(i)); LABELS.push(k.toUpperCase()); DEC.push(0); });
   series.push({label:"Spannung V",scale:"v",stroke:"#46d6a0",width:2,points:{show:false}});
   COLORS.push("#46d6a0"); LABELS.push("Spannung"); DEC.push(2);
@@ -170,6 +170,26 @@ function makeChart(){
   };
   chart=new uPlot(opts, [[]].concat(series.slice(1).map(()=>[])), document.getElementById("chart"));
   document.getElementById("chart").addEventListener("dblclick",resetZoom);
+  // Shift+Ziehen = sichtbaren Bereich verschieben (Pan). Normales Ziehen bleibt Box-Zoom.
+  chart.over.addEventListener("mousedown", e=>{
+    if(!e.shiftKey) return;                 // ohne Shift: uPlot macht Box-Zoom
+    e.stopImmediatePropagation(); e.preventDefault();
+    const rect=chart.over.getBoundingClientRect();
+    const x0=e.clientX, y0=e.clientY;
+    const xs=chart.scales.x, xmin=xs.min, xmax=xs.max, xspan=xmax-xmin;
+    const panY=(sc)=>{ const s=chart.scales[sc]; return {min:s.min,max:s.max,span:s.max-s.min}; };
+    const yA=panY("mv"), yV=panY("v"), yC=panY("a");
+    zoomed=true;
+    const move=ev=>{
+      const dxu=(ev.clientX-x0)/rect.width*xspan;   // px -> Zeit-Einheiten
+      chart.setScale("x",{min:xmin-dxu,max:xmax-dxu});
+      const fy=ev.clientY-y0;                        // vertikal mitziehen (nach unten = Werte hoch)
+      const shift=(o)=>({min:o.min+fy/rect.height*o.span, max:o.max+fy/rect.height*o.span});
+      chart.setScale("mv",shift(yA)); chart.setScale("v",shift(yV)); chart.setScale("a",shift(yC));
+    };
+    const up=()=>{ document.removeEventListener("mousemove",move); document.removeEventListener("mouseup",up); };
+    document.addEventListener("mousemove",move); document.addEventListener("mouseup",up);
+  }, true);   // capture-Phase, damit uPlots Zoom-Handler nicht auslöst
   buildLegend();
   // ziehbare Höhe: Wrapper-Höhe aus Session wiederherstellen + auf Änderungen reagieren
   const wrap=document.getElementById("chartwrap");

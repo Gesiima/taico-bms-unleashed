@@ -2,6 +2,18 @@
 
 Format: neueste Version oben. Versionierung: MAJOR.MINOR.PATCH.
 
+## [0.14.4] — 2026-07-07
+### Hinzugefügt
+- **Verschieben (Pan) im Chart**: mit **Shift+Ziehen** lässt sich der sichtbare Bereich
+  verschieben (Zeit horizontal, Werte vertikal). Normales Ziehen bleibt Box-Zoom.
+### Behoben
+- **Balancing-Punkte** erschienen an falschen Stellen: `points.show` gab fälschlich ein
+  Index-Array zurück (→ Default-Filter zeichnete alle Punkte). Jetzt korrekt über
+  `points.show=true` + `points.filter` — Punkte nur noch an echten Balancing-Zeitpunkten.
+### Doku
+- Produktinfo-Quelle präzisiert: Anzeige stammt aus **F1** (Pack-Modell/SN/FW); die
+  BMS-Eigenkennung via **E9** (`VK…_DGGZ_V15.53`) wird bewusst nicht angezeigt.
+
 ## [0.14.3] — 2026-07-07
 ### Hinzugefügt
 - **Balancing im Verlauf**: aktives Zell-Balancing wird als Punkte auf der jeweiligen
