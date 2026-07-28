@@ -41,7 +41,9 @@ zurückentwickelt; Details in `VKING_BMS_Protokoll_Spezifikation.md`.
   hervorgehoben, Rest gedimmt). **„Alle aus/an"**-Schalter zum schnellen Filtern vieler
   Linien und ein **Cursor-Tooltip** (Name + Wert der nächstliegenden Linie am Mauszeiger). Aktives
   Zell-Balancing wird als Punkte auf der jeweiligen Zell-Linie markiert. Zoom per Ziehen oder Mausrad (X);
-  Shift+Mausrad zoomt Y, Shift+Ziehen verschiebt; Vollansicht per Doppelklick.
+  Shift+Mausrad zoomt Y, Shift+Ziehen verschiebt; Vollansicht per Doppelklick. Über **Dual-Ansicht** lassen sich zwei Packs
+  gleichzeitig in zwei untereinander liegenden, in Zeit **und** Werten gekoppelten
+  Diagrammen mit gemeinsamer Legende betrachten.
 - Kontrastreiche 16-Farben-Palette für die Zellen; Diagrammbreite folgt dem Browserfenster.
 - Verlustfreies Downsampling für große Zeiträume; SQLite-Index für schnelle Abfragen.
 
@@ -313,7 +315,7 @@ Steuerung unter `control/` (CFET/DFET), Temperaturen, Kennwerte und der Online-S
 
 ## Stand & Roadmap
 
-Aktuelle Version: **v0.15.0**. Änderungen je Release in `CHANGELOG.md`, geplante Punkte
+Aktuelle Version: **v0.16.0**. Änderungen je Release in `CHANGELOG.md`, geplante Punkte
 in `ROADMAP.md`.
 
 ## Mitwirkung / Attribution

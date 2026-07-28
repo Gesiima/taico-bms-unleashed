@@ -2,6 +2,14 @@
 
 Format: neueste Version oben. Versionierung: MAJOR.MINOR.PATCH.
 
+## [0.16.0] — 2026-07-07
+### Hinzugefügt
+- **Dual-Ansicht im Verlauf**: per Schalter „Dual-Ansicht" wird ein zweites Diagramm
+  unter dem ersten eingeblendet, mit eigener Pack-Auswahl (BMS B). Beide Diagramme sind in
+  **Zeit und Werten gekoppelt** (Zoom, Pan, Mausrad und Cursor wirken auf beide) und teilen
+  sich **eine gemeinsame Legende** — Ein-/Ausblenden und „Alle aus/an" gelten für beide.
+  Balancing-Punkte, Cursor-Tooltip und Höhen-Ziehen bleiben je Diagramm erhalten.
+
 ## [0.15.0] — 2026-07-07
 ### Hinzugefügt
 - **Mausrad-Zoom** im Chart: Mausrad zoomt die Zeitachse (X), **Shift+Mausrad** die

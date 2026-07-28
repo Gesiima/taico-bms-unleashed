@@ -49,10 +49,11 @@
     font:11px var(--mono);white-space:nowrap;z-index:20;display:none}
   .uplot .u-over .tip b{color:#fff}
   .legend{display:flex;flex-wrap:wrap;gap:5px 14px;margin-top:6px}
-  #chartdrag{margin-top:6px;text-align:center;font:11px var(--mono);letter-spacing:.15em;
+  #chartdrag,.chartdrag{margin-top:6px;text-align:center;font:11px var(--mono);letter-spacing:.15em;
     color:var(--dim);border:1px solid var(--line);border-radius:7px;padding:5px;cursor:ns-resize;
     user-select:none;-webkit-user-select:none;touch-action:none}
-  #chartdrag:hover{color:var(--charge);border-color:#46d6a055;background:var(--panel2)}
+  #chartdrag:hover,.chartdrag:hover{color:var(--charge);border-color:#46d6a055;background:var(--panel2)}
+  .ctitle{font:12px var(--mono);color:var(--charge);letter-spacing:.08em;margin-bottom:8px}
   .lg{display:inline-flex;align-items:center;gap:5px;cursor:pointer;user-select:none;padding:2px 0}
   .lg .box{width:11px;height:11px;border-radius:3px;border:1.5px solid var(--c);background:var(--c);flex:none}
   .lg .lab{color:var(--muted);font:11px var(--mono)}
@@ -78,6 +79,9 @@
   <div class="bar">
     <label>BMS</label>
     <select id="bms"></select>
+    <button id="dualToggle" class="seg" title="Zweites Diagramm zeigen">Dual-Ansicht</button>
+    <label id="bmsBlab" style="display:none">BMS&nbsp;B</label>
+    <select id="bmsB" style="display:none"></select>
     <div class="grp" id="modes">
       <button class="seg active" data-live="0">Verlauf</button>
       <button class="seg" data-live="5">Live 5&nbsp;min</button>
@@ -95,54 +99,85 @@
     <button id="reset" title="Zoom zurücksetzen">Zoom reset</button>
     <span id="sel"></span>
   </div>
-  <div class="card">
-    <div id="chartwrap" style="overflow:hidden;height:470px;min-height:220px">
-      <div id="chart"></div>
+  <div class="card" id="cardA">
+    <div class="ctitle" id="titleA" style="display:none"></div>
+    <div id="wrapA" class="chartwrap" style="overflow:hidden;height:470px;min-height:220px">
+      <div id="chartA"></div>
     </div>
-    <div id="chartdrag" title="Diagrammhöhe ziehen">≡ Höhe ziehen</div>
+    <div class="chartdrag" data-wrap="wrapA" title="Diagrammhöhe ziehen">≡ Höhe ziehen</div>
+  </div>
+  <div class="card" id="cardB" style="display:none;margin-top:14px">
+    <div class="ctitle" id="titleB"></div>
+    <div id="wrapB" class="chartwrap" style="overflow:hidden;height:400px;min-height:220px">
+      <div id="chartB"></div>
+    </div>
+    <div class="chartdrag" data-wrap="wrapB" title="Diagrammhöhe ziehen">≡ Höhe ziehen</div>
+  </div>
+  <div class="card" style="margin-top:14px">
     <div id="legtools"><button id="allToggle" type="button">Alle aus</button>
-      <span class="hint">Tipp: „Alle aus" und dann einzelne Linien einblenden</span></div>
+      <span class="hint">Tipp: „Alle aus" und dann einzelne Linien einblenden · gilt für beide Diagramme</span></div>
     <div id="legtime"></div>
     <div id="legend" class="legend"></div>
-    <div class="hint">Ziehen = zoomen · Mausrad = X-Zoom · Shift+Mausrad = Y-Zoom · Shift+Ziehen = verschieben · Doppelklick oder „Zoom reset" = Vollansicht · Höhe über die Leiste „Höhe ziehen" unter dem Chart anpassen · Zellen links (mV), Spannung/Strom rechts, SOC 0–100 (ohne Achse).</div>
+    <div class="hint">Ziehen = zoomen · Mausrad = X-Zoom · Shift+Mausrad = Y-Zoom · Shift+Ziehen = verschieben · Doppelklick oder „Zoom reset" = Vollansicht · In der Dual-Ansicht sind beide Diagramme in Zeit und Werten gekoppelt.</div>
   </div>
 </main>
 <script src="/vendor/uPlot.iife.min.js"></script>
 <script>
 const CELLS=[...Array(16)].map((_,i)=>"v"+String(i+1).padStart(2,"0"));
-let chart=null, live=0, timer=null, source="", zoomed=false;
-const COLORS=[]; const LABELS=[]; const DEC=[];   // per series (1..18)
-let BAL=[];   // per x-index OR-aggregated balancing mask (bit0 = Zelle 1)
-// liefert die Indizes, an denen DIESE Zelle balanciert hat (für points.filter)
-function balanceFilter(si){
-  if(si<1 || si>16) return null;           // nur Zell-Serien
-  const bit=si-1, out=[];
-  for(let i=0;i<BAL.length;i++){ if((BAL[i]>>bit)&1) out.push(i); }
-  return out;
-}
-
 const CELL_PALETTE=["#f25f5f","#ed7126","#f2cd5f","#d4ed26","#a8f25f","#3fed26",
   "#5ff283","#26eda3","#5ff2f2","#26a3ed","#7b99f4","#715ff2","#b87bf4","#d426ed",
   "#f25fcd","#ed2671"];
 function cellColor(i){ return CELL_PALETTE[i % CELL_PALETTE.length]; }
 
-function cWidth(){ const el=document.getElementById("chart");
-  return Math.max(320, (el&&el.clientWidth)? el.clientWidth : (window.innerWidth-60)); }
+// Serien-Metadaten (identisch für beide Diagramme)
+const SERIES_META=[];
+CELLS.forEach((k,i)=>SERIES_META.push({label:k.toUpperCase(),scale:"mv",stroke:cellColor(i),width:1,dec:0,cell:true}));
+SERIES_META.push({label:"Spannung",scale:"v",stroke:"#46d6a0",width:2,dec:2});
+SERIES_META.push({label:"Strom",scale:"a",stroke:"#f4a648",width:2,dec:2});
+SERIES_META.push({label:"SOC",scale:"soc",stroke:"#ffffff",width:2,dec:0});
+const COLORS=SERIES_META.map(m=>m.stroke), LABELS=SERIES_META.map(m=>m.label), DEC=SERIES_META.map(m=>m.dec);
+const UNIT={mv:"mV",v:"V",a:"A",soc:"%"};
 
-function makeChart(){
-  const series=[{}];
-  CELLS.forEach((k,i)=>{ series.push({label:k.toUpperCase(),scale:"mv",stroke:cellColor(i),width:1,
-    points:{show:true, size:6, filter:(u,si)=>balanceFilter(si)}});
-    COLORS.push(cellColor(i)); LABELS.push(k.toUpperCase()); DEC.push(0); });
-  series.push({label:"Spannung V",scale:"v",stroke:"#46d6a0",width:2,points:{show:false}});
-  COLORS.push("#46d6a0"); LABELS.push("Spannung"); DEC.push(2);
-  series.push({label:"Strom A",scale:"a",stroke:"#f4a648",width:2,points:{show:false}});
-  COLORS.push("#f4a648"); LABELS.push("Strom"); DEC.push(2);
-  series.push({label:"SOC %",scale:"soc",stroke:"#ffffff",width:2,points:{show:false}});
-  COLORS.push("#ffffff"); LABELS.push("SOC"); DEC.push(0);
+let charts=[];                 // uPlot-Instanzen: [0]=A (oben), [1]=B (unten)
+let sources=["",""];           // ausgewählte Quelle je Slot
+let dual=false, live=0, timer=null, zoomed=false, syncing=false;
+const SYNC = (typeof uPlot.sync==="function") ? uPlot.sync("vkbms") : null;
+
+// Balancing-Punkte je Diagramm (u._bal = ODER-Maske je x-Index)
+function balanceFilter(u,si){
+  if(si<1 || si>16) return null;
+  const bit=si-1, bal=u._bal||[], out=[];
+  for(let i=0;i<bal.length;i++){ if((bal[i]>>bit)&1) out.push(i); }
+  return out;
+}
+function buildSeries(){
+  return [{}].concat(SERIES_META.map(m=>({
+    label:m.label, scale:m.scale, stroke:m.stroke, width:m.width,
+    points: m.cell ? {show:true,size:6,filter:(u,si)=>balanceFilter(u,si)} : {show:false}
+  })));
+}
+
+function cWidth(divId){ const el=document.getElementById(divId);
+  return Math.max(320, (el&&el.clientWidth)? el.clientWidth : (window.innerWidth-60)); }
+function wrapHeight(wrapId){ const w=document.getElementById(wrapId); return Math.max(220,(w&&w.clientHeight)||440); }
+
+// Skalen-Kopplung: eine Änderung auf einem Diagramm auf die anderen spiegeln
+function propagateScale(u, key){
+  if(syncing) return;
+  const s=u.scales[key]; if(!s) return;
+  syncing=true;
+  charts.forEach(o=>{ if(o!==u && o.scales[key]){ o.setScale(key,{min:s.min,max:s.max}); } });
+  syncing=false;
+}
+function snapScales(u){ const g=k=>[u.scales[k].min,u.scales[k].max];
+  return {x:g("x"),mv:g("mv"),v:g("v"),a:g("a")}; }
+function applyScales(u,r){ u.setScale("x",{min:r.x[0],max:r.x[1]}); u.setScale("mv",{min:r.mv[0],max:r.mv[1]});
+  u.setScale("v",{min:r.v[0],max:r.v[1]}); u.setScale("a",{min:r.a[0],max:r.a[1]}); }
+
+function makeChart(divId, wrapId, dragId){
   const opts={
-    width: cWidth(), height: chartHeight(),
-    scales:{x:{time:true}, mv:{}, v:{}, a:{}, soc:{range:[0,100]}},   // SOC feste Skala, ohne Achse
+    width:cWidth(divId), height:wrapHeight(wrapId),
+    scales:{x:{time:true}, mv:{}, v:{}, a:{}, soc:{range:[0,100]}},
     axes:[
       {stroke:"#7e9893",grid:{stroke:"#1c2c2a"},ticks:{stroke:"#1c2c2a"}},
       {scale:"mv",stroke:"#7e9893",grid:{stroke:"#1c2c2a"},label:"Zellspannung (mV)",
@@ -152,168 +187,168 @@ function makeChart(){
       {scale:"a",side:1,stroke:"#caa46a",grid:{show:false},size:58,
        values:(u,s)=>s.map(v=>(v%1?v.toFixed(1):v.toFixed(0)).replace(".",",")+" A")}
     ],
-    cursor:{drag:{x:true,y:true,uni:20}, focus:{alpha:0.22}},
-    legend:{show:false},               // eigene Legende unten
+    cursor:Object.assign({drag:{x:true,y:true,uni:20}, focus:{alpha:0.22}},
+                         SYNC?{sync:{key:SYNC.key, scales:["x",null], setSeries:false}}:{}),
+    legend:{show:false},
     hooks:{
       setSelect:[u=>{
-        if(u.select.width>0){
-          zoomed=true;
+        if(u.select.width>0){ zoomed=true;
           const a=u.posToVal(u.select.left,"x"), b=u.posToVal(u.select.left+u.select.width,"x");
           const f=t=>new Date(t*1000).toLocaleTimeString("de-DE");
           const el=document.getElementById("sel"); if(el) el.textContent="Auswahl: "+f(a)+" – "+f(b);
         }
       }],
-      setCursor:[u=>{ updateLegendValues(u.cursor.idx); updateTip(u); }],
-      setData:[u=>updateLegendValues(null)]
+      setScale:[propagateScale],
+      setCursor:[u=>{ updateTip(u); updateLegendValues(u, u.cursor.idx); }]
     },
-    series
+    series:buildSeries()
   };
-  chart=new uPlot(opts, [[]].concat(series.slice(1).map(()=>[])), document.getElementById("chart"));
-  document.getElementById("chart").addEventListener("dblclick",resetZoom);
-  // Shift+Ziehen = sichtbaren Bereich verschieben (Pan). Normales Ziehen bleibt Box-Zoom.
-  chart.over.addEventListener("mousedown", e=>{
-    if(!e.shiftKey) return;                 // ohne Shift: uPlot macht Box-Zoom
+  const u=new uPlot(opts, [[]].concat(SERIES_META.map(()=>[])), document.getElementById(divId));
+  u._bal=[];
+  const over=u.over;
+  document.getElementById(divId).addEventListener("dblclick",resetZoom);
+  // Shift+Ziehen = verschieben (Pan); normales Ziehen bleibt Box-Zoom
+  over.addEventListener("mousedown", e=>{
+    if(!e.shiftKey) return;
     e.stopImmediatePropagation(); e.preventDefault();
-    const rect=chart.over.getBoundingClientRect();
+    const rect=over.getBoundingClientRect();
     const x0=e.clientX, y0=e.clientY;
-    const xs=chart.scales.x, xmin=xs.min, xmax=xs.max, xspan=xmax-xmin;
-    const panY=(sc)=>{ const s=chart.scales[sc]; return {min:s.min,max:s.max,span:s.max-s.min}; };
-    const yA=panY("mv"), yV=panY("v"), yC=panY("a");
+    const xs=u.scales.x, xmin=xs.min, xmax=xs.max, xspan=xmax-xmin;
+    const snap=sc=>{ const s=u.scales[sc]; return {min:s.min,max:s.max,span:s.max-s.min}; };
+    const yA=snap("mv"), yV=snap("v"), yC=snap("a");
     zoomed=true;
     const move=ev=>{
-      const dxu=(ev.clientX-x0)/rect.width*xspan;   // px -> Zeit-Einheiten
-      chart.setScale("x",{min:xmin-dxu,max:xmax-dxu});
-      const fy=ev.clientY-y0;                        // vertikal mitziehen (nach unten = Werte hoch)
-      const shift=(o)=>({min:o.min+fy/rect.height*o.span, max:o.max+fy/rect.height*o.span});
-      chart.setScale("mv",shift(yA)); chart.setScale("v",shift(yV)); chart.setScale("a",shift(yC));
+      const dxu=(ev.clientX-x0)/rect.width*xspan;
+      u.setScale("x",{min:xmin-dxu,max:xmax-dxu});
+      const fy=ev.clientY-y0;
+      const sh=o=>({min:o.min+fy/rect.height*o.span, max:o.max+fy/rect.height*o.span});
+      u.setScale("mv",sh(yA)); u.setScale("v",sh(yV)); u.setScale("a",sh(yC));
     };
     const up=()=>{ document.removeEventListener("mousemove",move); document.removeEventListener("mouseup",up); };
     document.addEventListener("mousemove",move); document.addEventListener("mouseup",up);
-  }, true);   // capture-Phase, damit uPlots Zoom-Handler nicht auslöst
-  // Mausrad = X (Zeit) zoomen, Shift+Mausrad = Y (mV/V/A) zoomen – jeweils um den Cursor
-  chart.over.addEventListener("wheel", e=>{
+  }, true);
+  // Mausrad = X zoomen, Shift+Mausrad = Y (mV/V/A), cursor-zentriert
+  over.addEventListener("wheel", e=>{
     e.preventDefault();
-    const rect=chart.over.getBoundingClientRect();
-    const f = e.deltaY < 0 ? 0.85 : 1/0.85;          // hoch = rein, runter = raus
-    const zoomScale=(sc, px)=>{ const s=chart.scales[sc]; if(s.min==null||s.max==null) return;
-      const v=chart.posToVal(px, sc);
-      chart.setScale(sc,{min:v-(v-s.min)*f, max:v+(s.max-v)*f}); };
+    const rect=over.getBoundingClientRect();
+    const f = e.deltaY<0 ? 0.85 : 1/0.85;
+    const zoomScale=(sc,px)=>{ const s=u.scales[sc]; if(s.min==null||s.max==null) return;
+      const v=u.posToVal(px,sc); u.setScale(sc,{min:v-(v-s.min)*f, max:v+(s.max-v)*f}); };
     zoomed=true;
     if(e.shiftKey){ const py=e.clientY-rect.top; ["mv","v","a"].forEach(s=>zoomScale(s,py)); }
     else { zoomScale("x", e.clientX-rect.left); }
   }, {passive:false});
-  buildLegend();
-  // ziehbare Höhe: Wrapper-Höhe aus Session wiederherstellen + auf Änderungen reagieren
-  const wrap=document.getElementById("chartwrap");
-  const savedH=sessionStorage.getItem("chartHeight");
+  // ziehbare Höhe
+  const wrap=document.getElementById(wrapId);
+  const savedH=sessionStorage.getItem("chartHeight_"+wrapId);
   if(savedH){ wrap.style.height=savedH+"px"; }
-  let rt=null;
-  const relayout=()=>{ if(chart) chart.setSize({width:cWidth(),height:chartHeight()}); };
+  const relayout=()=>{ u.setSize({width:cWidth(divId),height:wrapHeight(wrapId)}); };
   if(window.ResizeObserver){
-    new ResizeObserver(()=>{ sessionStorage.setItem("chartHeight",wrap.clientHeight); relayout(); }).observe(wrap);
+    new ResizeObserver(()=>{ sessionStorage.setItem("chartHeight_"+wrapId,wrap.clientHeight); relayout(); }).observe(wrap);
   }
-  // sichtbare Ziehleiste für die Höhe (Maus + Touch)
-  const drag=document.getElementById("chartdrag");
+  const drag=document.querySelector('.chartdrag[data-wrap="'+wrapId+'"]');
   if(drag){
     let sy=0, sh=0, dragging=false;
-    const move=e=>{ if(!dragging) return;
-      const y=(e.touches?e.touches[0].clientY:e.clientY);
+    const move=ev=>{ if(!dragging) return; const y=(ev.touches?ev.touches[0].clientY:ev.clientY);
       const h=Math.max(220,Math.min(1400, sh+(y-sy)));
-      wrap.style.height=h+"px"; sessionStorage.setItem("chartHeight",h); relayout(); e.preventDefault(); };
+      wrap.style.height=h+"px"; sessionStorage.setItem("chartHeight_"+wrapId,h); relayout(); ev.preventDefault(); };
     const up=()=>{ dragging=false; document.removeEventListener("pointermove",move); document.removeEventListener("pointerup",up); };
-    drag.addEventListener("pointerdown",e=>{ dragging=true; sy=e.clientY; sh=wrap.clientHeight;
-      document.addEventListener("pointermove",move); document.addEventListener("pointerup",up); e.preventDefault(); });
+    drag.addEventListener("pointerdown",ev=>{ dragging=true; sy=ev.clientY; sh=wrap.clientHeight;
+      document.addEventListener("pointermove",move); document.addEventListener("pointerup",up); ev.preventDefault(); });
   }
-  window.addEventListener("resize",()=>{ clearTimeout(rt); rt=setTimeout(relayout,150); });
+  return u;
 }
-function chartHeight(){ const w=document.getElementById("chartwrap"); return Math.max(220,(w&&w.clientHeight)||470); }
 
+let rt=null;
+window.addEventListener("resize",()=>{ clearTimeout(rt); rt=setTimeout(()=>charts.forEach((u,i)=>{
+  const ids=i===0?["chartA","wrapA"]:["chartB","wrapB"]; u.setSize({width:cWidth(ids[0]),height:wrapHeight(ids[1])});
+}),150); });
+
+// ---- gemeinsame Legende (steuert beide Diagramme) ----
 function buildLegend(){
   const box=document.getElementById("legend"); box.innerHTML="";
   for(let i=0;i<LABELS.length;i++){
-    const si=i+1;                       // uPlot-Serienindex (0 = x)
+    const si=i+1;
     const el=document.createElement("div"); el.className="lg"; el.dataset.si=si;
     el.style.setProperty("--c",COLORS[i]);
-    el.innerHTML=`<span class="box"></span><span class="lab">${LABELS[i]}</span><span class="val">–</span>`;
-    el.onclick=()=>{ const sh=!chart.series[si].show; chart.setSeries(si,{show:sh}); el.classList.toggle("off",!sh); };
-    el.onmouseenter=()=>{ if(chart) chart.setSeries(si,{focus:true}); };
-    el.onmouseleave=()=>{ if(chart) chart.setSeries(null,{focus:false}); };
+    el.innerHTML='<span class="box"></span><span class="lab">'+LABELS[i]+'</span><span class="val">–</span>';
+    el.onclick=()=>{ const sh=!(charts[0]&&charts[0].series[si].show);
+      charts.forEach(u=>u.setSeries(si,{show:sh})); el.classList.toggle("off",!sh); };
+    el.onmouseenter=()=>charts.forEach(u=>u.setSeries(si,{focus:true}));
+    el.onmouseleave=()=>charts.forEach(u=>u.setSeries(null,{focus:false}));
     box.appendChild(el);
   }
 }
-// Alle Serien mit einem Klick aus-/einblenden (schnelles Filtern bei vielen Linien)
 function toggleAll(){
-  if(!chart) return;
-  const anyOn=chart.series.slice(1).some(s=>s.show);
-  const target=!anyOn;                  // etwas an -> alles aus; alles aus -> alles an
-  for(let si=1; si<chart.series.length; si++) chart.setSeries(si,{show:target});
+  if(!charts[0]) return;
+  const anyOn=charts[0].series.slice(1).some(s=>s.show);
+  const target=!anyOn;
+  charts.forEach(u=>{ for(let si=1; si<u.series.length; si++) u.setSeries(si,{show:target}); });
   document.querySelectorAll("#legend .lg").forEach(el=>el.classList.toggle("off",!target));
   const b=document.getElementById("allToggle"); if(b) b.textContent=target?"Alle aus":"Alle an";
 }
-const UNIT={mv:"mV",v:"V",a:"A",soc:"%"};
 function updateTip(u){
   let tip=u.over.querySelector(".tip");
   if(!tip){ tip=document.createElement("div"); tip.className="tip"; u.over.appendChild(tip); }
   const {idx,left,top}=u.cursor;
   if(idx==null || left<0 || top<0){ tip.style.display="none"; return; }
-  // nächstliegende sichtbare Serie zum Mauszeiger bestimmen
   let best=null, bestD=Infinity;
   for(let si=1; si<u.series.length; si++){
     if(!u.series[si].show) continue;
-    const v=u.data[si][idx];
-    if(v==null || isNaN(v)) continue;
-    const y=u.valToPos(v, u.series[si].scale);
-    const d=Math.abs(y-top);
+    const v=u.data[si][idx]; if(v==null || isNaN(v)) continue;
+    const y=u.valToPos(v, u.series[si].scale); const d=Math.abs(y-top);
     if(d<bestD){ bestD=d; best=si; }
   }
   if(best==null){ tip.style.display="none"; return; }
-  const v=u.data[best][idx];
-  const unit=UNIT[u.series[best].scale]||"";
-  tip.innerHTML=`<span style="color:${COLORS[best-1]}">${LABELS[best-1]}</span>: <b>${Number(v).toFixed(DEC[best-1])} ${unit}</b>`;
+  const v=u.data[best][idx], unit=UNIT[u.series[best].scale]||"";
+  tip.innerHTML='<span style="color:'+COLORS[best-1]+'">'+LABELS[best-1]+'</span>: <b>'+Number(v).toFixed(DEC[best-1])+' '+unit+'</b>';
   tip.style.left=left+"px"; tip.style.top=top+"px"; tip.style.display="block";
 }
-function updateLegendValues(idx){
-  if(!chart) return;
-  const data=chart.data; const n=data[0]?data[0].length:0;
-  const i = (idx==null) ? n-1 : idx;     // ohne Hover: letzter Wert
+function updateLegendValues(u, idx){
+  u = u || charts[0]; if(!u) return;
+  const data=u.data, n=data[0]?data[0].length:0;
+  const i=(idx==null)?n-1:idx;
   const tEl=document.getElementById("legtime");
   if(tEl){ const t=(i>=0&&data[0])?data[0][i]:null;
     tEl.textContent = t? "Zeit: "+new Date(t*1000).toLocaleString("de-DE") : ""; }
   document.querySelectorAll("#legend .lg").forEach(el=>{
     const si=+el.dataset.si; const v=(i>=0 && data[si])?data[si][i]:null;
-    el.querySelector(".val").textContent = (v==null||isNaN(v))?"–":Number(v).toFixed(DEC[si-1]);
+    el.querySelector(".val").textContent=(v==null||isNaN(v))?"–":Number(v).toFixed(DEC[si-1]);
   });
 }
 function resetZoom(){
-  zoomed=false;
-  const el=document.getElementById("sel"); if(el) el.textContent="";
-  if(chart){ ["x","mv","v","a"].forEach(s=>chart.setScale(s,{min:null,max:null}));
-    chart.setScale("soc",{min:0,max:100}); }   // SOC zurück auf feste Range
+  zoomed=false; const el=document.getElementById("sel"); if(el) el.textContent="";
+  if(!charts[0]) return;
+  syncing=true;
+  charts.forEach(u=>{ ["x","mv","v","a"].forEach(s=>u.setScale(s,{min:null,max:null})); u.setScale("soc",{min:0,max:100}); });
+  const ref=snapScales(charts[0]); charts.forEach(u=>applyScales(u,ref));
+  syncing=false;
 }
 
-async function loadData(){
-  if(!source) return;
-  let url="/api/history?source="+encodeURIComponent(source)+"&max_points=2000";
+async function loadOne(slot){
+  const src=sources[slot], u=charts[slot]; if(!u||!src) return;
+  let url="/api/history?source="+encodeURIComponent(src)+"&max_points=2000";
   if(live>0){ url+="&minutes="+live; }
-  else{
-    const f=document.getElementById("from").value, t=document.getElementById("to").value;
-    if(f) url+="&from="+encodeURIComponent(f+":00");   // ISO mit 'T' beibehalten
-    if(t) url+="&to="+encodeURIComponent(t+":59");
-  }
+  else{ const f=document.getElementById("from").value, t=document.getElementById("to").value;
+    if(f) url+="&from="+encodeURIComponent(f+":00"); if(t) url+="&to="+encodeURIComponent(t+":59"); }
   try{
     const d=await (await fetch(url,{cache:"no-store"})).json();
     const xs=(d.time||[]).map(s=>Date.parse(s)/1000);
-    const data=[xs];
-    CELLS.forEach(k=>data.push(d[k]||[]));
+    const data=[xs]; CELLS.forEach(k=>data.push(d[k]||[]));
     data.push(d.voltage_v||[]); data.push(d.current_a||[]); data.push(d.soc||[]);
-    BAL = d.balance_mask||[];   // Balancing-Marker je Zelle
-    // Zoom im Live-Modus bewahren
-    let keep=null;
-    if(live>0 && zoomed && chart){ const sc=chart.scales; keep={x:[sc.x.min,sc.x.max],mv:[sc.mv.min,sc.mv.max],v:[sc.v.min,sc.v.max],a:[sc.a.min,sc.a.max]}; }
-    chart.setData(data);
-    if(keep){ chart.setScale("x",{min:keep.x[0],max:keep.x[1]}); chart.setScale("mv",{min:keep.mv[0],max:keep.mv[1]});
-              chart.setScale("v",{min:keep.v[0],max:keep.v[1]}); chart.setScale("a",{min:keep.a[0],max:keep.a[1]}); }
+    u._bal=d.balance_mask||[];
+    u.setData(data);
   }catch(e){ console.error(e); }
+}
+async function loadData(){
+  const slots = dual?[0,1]:[0];
+  const keep = (live>0 && zoomed && charts[0]) ? snapScales(charts[0]) : null;
+  syncing=true;
+  for(const s of slots){ await loadOne(s); }
+  const ref = keep || snapScales(charts[0]);
+  charts.forEach(u=>applyScales(u,ref));
+  syncing=false;
+  updateLegendValues(charts[0], null);
 }
 
 function setMode(m){
@@ -321,10 +356,27 @@ function setMode(m){
   document.querySelectorAll("#modes .seg").forEach(b=>b.classList.toggle("active",+b.dataset.live===live));
   document.getElementById("range").style.display = live>0 ? "none":"flex";
   if(timer){ clearInterval(timer); timer=null; }
-  if(chart) resetZoom();          // Moduswechsel: vorherigen Zoom verwerfen, sonst liegt
-  //                                das (Live-)Fenster ggf. außerhalb des sichtbaren Bereichs
+  if(charts[0]) resetZoom();
   loadData();
   if(live>0) timer=setInterval(loadData, live>=120?5000:2000);
+}
+
+function setDual(on){
+  dual=on;
+  document.getElementById("dualToggle").classList.toggle("active",on);
+  document.getElementById("cardB").style.display   = on?"":"none";
+  document.getElementById("bmsB").style.display    = on?"":"none";
+  document.getElementById("bmsBlab").style.display = on?"inline":"none";
+  document.getElementById("titleA").style.display  = on?"":"none";
+  if(on && !charts[1]){ charts[1]=makeChart("chartB","wrapB"); buildLegendSyncFromA(charts[1]); }
+  document.getElementById("titleA").textContent = "Pack A · "+sources[0];
+  document.getElementById("titleB").textContent = "Pack B · "+sources[1];
+  loadData();
+}
+// neu erzeugtes B-Diagramm auf aktuellen Legenden-Zustand von A bringen
+function buildLegendSyncFromA(uB){
+  if(!charts[0]) return;
+  for(let si=1; si<charts[0].series.length; si++) uB.setSeries(si,{show:charts[0].series[si].show});
 }
 
 async function pollStatus(){
@@ -337,16 +389,21 @@ async function pollStatus(){
 }
 
 async function init(){
-  makeChart();
+  charts[0]=makeChart("chartA","wrapA");
+  buildLegend();
   pollStatus(); setInterval(pollStatus,2000);
+  let packs=[];
   try{
     const s=await (await fetch("/api/state")).json();
-    const sel=document.getElementById("bms");
-    (s.packs||[]).forEach(p=>{ const o=document.createElement("option"); o.value=p.source; o.textContent=p.source; sel.appendChild(o); });
-    source=(s.packs&&s.packs[0])?s.packs[0].source:"";
-    sel.onchange=()=>{ source=sel.value; resetZoom(); loadData(); };
+    packs=(s.packs||[]).map(p=>p.source);
   }catch(e){}
-  // Default-Zeitraum: jetzt − 24 h
+  const selA=document.getElementById("bms"), selB=document.getElementById("bmsB");
+  packs.forEach(p=>{ [selA,selB].forEach(sel=>{ const o=document.createElement("option"); o.value=p; o.textContent=p; sel.appendChild(o); }); });
+  sources[0]=packs[0]||"";
+  sources[1]=packs[1]||packs[0]||"";
+  selA.value=sources[0]; selB.value=sources[1];
+  selA.onchange=()=>{ sources[0]=selA.value; document.getElementById("titleA").textContent="Pack A · "+sources[0]; resetZoom(); loadData(); };
+  selB.onchange=()=>{ sources[1]=selB.value; document.getElementById("titleB").textContent="Pack B · "+sources[1]; resetZoom(); loadData(); };
   const now=new Date(), past=new Date(Date.now()-24*3600e3);
   const iso=d=>new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);
   document.getElementById("to").value=iso(now);
@@ -355,9 +412,11 @@ async function init(){
   document.getElementById("load").onclick=()=>{ resetZoom(); loadData(); };
   document.getElementById("reset").onclick=resetZoom;
   document.getElementById("allToggle").onclick=toggleAll;
+  document.getElementById("dualToggle").onclick=()=>setDual(!dual);
   setMode(0);
 }
 init();
+
 </script>
 </body>
 </html>
