@@ -315,7 +315,7 @@ Steuerung unter `control/` (CFET/DFET), Temperaturen, Kennwerte und der Online-S
 
 ## Stand & Roadmap
 
-Aktuelle Version: **v0.16.2**. Änderungen je Release in `CHANGELOG.md`, geplante Punkte
+Aktuelle Version: **v0.16.10**. Änderungen je Release in `CHANGELOG.md`, geplante Punkte
 in `ROADMAP.md`.
 
 ## Mitwirkung / Attribution

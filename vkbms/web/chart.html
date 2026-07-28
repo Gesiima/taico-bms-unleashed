@@ -37,7 +37,9 @@
   .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
   .hint{font:11px var(--mono);color:var(--dim);margin-top:10px}
   input[type=datetime-local]{font:12px var(--mono);background:var(--panel2);color:var(--text);
-    border:1px solid var(--line);border-radius:7px;padding:6px 9px}
+    border:1px solid var(--line);border-radius:7px;padding:6px 9px;cursor:pointer}
+  input[type=datetime-local]::-webkit-calendar-picker-indicator{filter:invert(.85);cursor:pointer;opacity:.8}
+  input[type=datetime-local]::-webkit-calendar-picker-indicator:hover{opacity:1}
   /* eigene, kompakte Legende */
   #legtime{font:11px var(--mono);color:var(--charge);margin-top:12px;height:14px}
   #legtools{display:flex;align-items:center;gap:12px;margin-top:12px}
@@ -140,9 +142,9 @@ const UNIT={mv:"mV",v:"V",a:"A",soc:"%"};
 
 let charts=[];                 // uPlot-Instanzen: [0]=A (oben), [1]=B (unten)
 let PACKS=[];                  // verfügbare Quellen
-let preDualHA=null;            // Einzel-Höhe von A vor dem Umschalten auf Dual
 let sources=["",""];           // ausgewählte Quelle je Slot
-let dual=false, live=0, timer=null, zoomed=false, syncing=false;
+let dual=false, live=0, timer=null, zoomed=false;
+let liveY={};                  // im Live-Betrieb nur wachsende Y-Bereiche (kein Springen)
 const SYNC = (typeof uPlot.sync==="function") ? uPlot.sync("vkbms") : null;
 
 // Balancing-Punkte je Diagramm (u._bal = ODER-Maske je x-Index)
@@ -163,28 +165,30 @@ function cWidth(divId){ const el=document.getElementById(divId);
   return Math.max(320, (el&&el.clientWidth)? el.clientWidth : (window.innerWidth-60)); }
 function wrapHeight(wrapId){ const w=document.getElementById(wrapId); return Math.max(220,(w&&w.clientHeight)||440); }
 
-// Skalen-Kopplung: eine Änderung auf einem Diagramm auf die anderen spiegeln
+// Skalen-Kopplung: Änderung auf die anderen Diagramme spiegeln – timing-unabhängig.
+// Gespiegelt wird nur bei Wertunterschied; dadurch stoppt die gegenseitige Spiegelung
+// sofort (kein Pendeln), unabhängig davon wann uPlot den setScale-Hook feuert.
 function propagateScale(u, key){
-  if(syncing) return;
   const s=u.scales[key]; if(!s) return;
-  syncing=true;
-  charts.forEach(o=>{ if(o!==u && o.scales[key]){ o.setScale(key,{min:s.min,max:s.max}); } });
-  syncing=false;
+  charts.forEach(o=>{ if(o!==u){ const os=o.scales[key];
+    if(os && (os.min!==s.min || os.max!==s.max)) o.setScale(key,{min:s.min,max:s.max}); } });
 }
-function snapScales(u){ const g=k=>[u.scales[k].min,u.scales[k].max];
-  return {x:g("x"),mv:g("mv"),v:g("v"),a:g("a")}; }
-// Vereinigung der Wertebereiche ALLER Diagramme, damit in der Dual-Ansicht nichts
-// abgeschnitten wird (beide Packs passen in die gekoppelten Achsen)
-function unionScales(){
+// Datenbereiche (aus u._range, in applyOne gesetzt) über alle Diagramme vereinigen
+function unionRanges(){
   const r={};
   ["x","mv","v","a"].forEach(k=>{ let mn=Infinity, mx=-Infinity;
-    charts.forEach(u=>{ const s=u.scales[k]; if(s&&s.min!=null&&s.max!=null){ mn=Math.min(mn,s.min); mx=Math.max(mx,s.max); } });
+    charts.forEach(u=>{ const e=u._range&&u._range[k]; if(e){ mn=Math.min(mn,e[0]); mx=Math.max(mx,e[1]); } });
     r[k]=(mn===Infinity)?[null,null]:[mn,mx];
   });
   return r;
 }
-function applyScales(u,r){ u.setScale("x",{min:r.x[0],max:r.x[1]}); u.setScale("mv",{min:r.mv[0],max:r.mv[1]});
-  u.setScale("v",{min:r.v[0],max:r.v[1]}); u.setScale("a",{min:r.a[0],max:r.a[1]}); }
+function padY(rng){ if(!rng||rng[0]==null) return [null,null];
+  const [mn,mx]=rng; if(mn===mx) return [mn-1,mx+1]; const p=(mx-mn)*0.05; return [mn-p,mx+p]; }
+// Live: Y-Achsen auf feste Schrittweiten runden -> ruhige, nicht springende Skalen
+const YSTEP={mv:50, v:1, a:2};
+function snapY(rng, step){ if(!rng||rng[0]==null) return [null,null];
+  let [mn,mx]=rng; if(mn===mx){ mn-=step; mx+=step; }
+  return [Math.floor(mn/step)*step, Math.ceil(mx/step)*step]; }
 
 function makeChart(divId, wrapId, dragId){
   const opts={
@@ -282,12 +286,15 @@ window.addEventListener("resize",()=>{ clearTimeout(rt); rt=setTimeout(()=>{
 function applyDualHeights(){
   if(!dual || !charts[1]) return;
   const cardA=document.getElementById("cardA");
-  const top=cardA.getBoundingClientRect().top;                 // ab hier beginnen die Diagramme
+  const wrapA=document.getElementById("wrapA"), wrapB=document.getElementById("wrapB");
   const legend=document.querySelector("main > .card:last-child");
-  const legendH=legend?legend.getBoundingClientRect().height:0;
-  const overhead = 2*(16*2 + 28 + 22) + 14 + 14 + 18;          // je Card: Padding+Ziehleiste+Titel; + Abstände
-  const each=Math.max(200, Math.floor((window.innerHeight - top - legendH - overhead)/2));
-  ["wrapA","wrapB"].forEach(w=>{ document.getElementById(w).style.height=each+"px"; });
+  const top=cardA.getBoundingClientRect().top;                 // Oberkante Diagramm-Bereich
+  const bottom=legend.getBoundingClientRect().bottom;          // Unterkante des letzten Elements
+  // "chrome" = alles zwischen top und bottom AUSSER den beiden Chart-Wraps -> exakt gemessen
+  const chrome=(bottom-top)-(wrapA.clientHeight+wrapB.clientHeight);
+  const mb=parseFloat(getComputedStyle(document.querySelector("main")).marginBottom)||0;
+  const each=Math.max(200, Math.floor((window.innerHeight - top - chrome - mb - 2)/2));
+  wrapA.style.height=each+"px"; wrapB.style.height=each+"px";
   charts.forEach((u,i)=>{ const d=i===0?"chartA":"chartB"; u.setSize({width:cWidth(d),height:each}); });
 }
 
@@ -343,17 +350,32 @@ function updateLegendValues(u, idx){
     el.querySelector(".val").textContent=(v==null||isNaN(v))?"–":Number(v).toFixed(DEC[si-1]);
   });
 }
+function fitAll(){                        // volle Vereinigung (Verlauf / Reset)
+  const u=unionRanges();
+  charts.forEach(c=>{ c.setScale("x",{min:u.x[0],max:u.x[1]}); c.setScale("soc",{min:0,max:100});
+    ["mv","v","a"].forEach(k=>{ const t=padY(u[k]); c.setScale(k, t[0]!=null?{min:t[0],max:t[1]}:{min:null,max:null}); }); });
+}
+// Live-Skalierung: festes gleitendes Zeitfenster + gerundete (gesnappte) Y-Achsen
+function applyLiveScales(){
+  const u=unionRanges();
+  const xmax=u.x[1];
+  const xmin=(xmax!=null)? xmax - live*60 : u.x[0];
+  charts.forEach(c=>c.setScale("x",{min:xmin,max:xmax}));
+  ["mv","v","a"].forEach(k=>{ const t=snapY(u[k], YSTEP[k]); if(t[0]==null) return;
+    let mn=t[0], mx=t[1];
+    if(liveY[k]){ mn=Math.min(liveY[k][0],mn); mx=Math.max(liveY[k][1],mx); }
+    liveY[k]=[mn,mx]; charts.forEach(c=>c.setScale(k,{min:mn,max:mx}));
+  });
+}
 function resetZoom(){
-  zoomed=false; const el=document.getElementById("sel"); if(el) el.textContent="";
+  zoomed=false; liveY={}; const el=document.getElementById("sel"); if(el) el.textContent="";
   if(!charts[0]) return;
-  syncing=true;
-  charts.forEach(u=>{ ["x","mv","v","a"].forEach(s=>u.setScale(s,{min:null,max:null})); u.setScale("soc",{min:0,max:100}); });
-  const ref=unionScales(); charts.forEach(u=>applyScales(u,ref));
-  syncing=false;
+  if(live>0) applyLiveScales();   // Live: exakt die Live-Ansicht wiederherstellen (nicht fitAll)
+  else fitAll();
 }
 
-async function loadOne(slot){
-  const src=sources[slot], u=charts[slot]; if(!u||!src) return;
+async function fetchOne(slot){
+  const src=sources[slot], u=charts[slot]; if(!u||!src) return null;
   let url="/api/history?source="+encodeURIComponent(src)+"&max_points=2000";
   if(live>0){ url+="&minutes="+live; }
   else{ const f=document.getElementById("from").value, t=document.getElementById("to").value;
@@ -363,19 +385,33 @@ async function loadOne(slot){
     const xs=(d.time||[]).map(s=>Date.parse(s)/1000);
     const data=[xs]; CELLS.forEach(k=>data.push(d[k]||[]));
     data.push(d.voltage_v||[]); data.push(d.current_a||[]); data.push(d.soc||[]);
-    u._bal=d.balance_mask||[];
-    u.setData(data);
-  }catch(e){ console.error(e); }
+    const ext=arrs=>{ let mn=Infinity,mx=-Infinity; arrs.forEach(a=>a&&a.forEach(v=>{ if(v!=null&&!isNaN(v)){ if(v<mn)mn=v; if(v>mx)mx=v; } })); return mn===Infinity?null:[mn,mx]; };
+    return { slot, data, bal:(d.balance_mask||[]),
+      range:{ x: xs.length?[xs[0],xs[xs.length-1]]:null, mv: ext(data.slice(1,17)), v: ext([data[17]]), a: ext([data[18]]) } };
+  }catch(e){ console.error(e); return null; }
 }
+function applyOne(res){                     // synchron: Daten + Bereiche setzen
+  if(!res) return; const u=charts[res.slot]; if(!u) return;
+  u._bal=res.bal; u._range=res.range; u.setData(res.data, false);
+}
+let loading=false;
 async function loadData(){
-  const slots = dual?[0,1]:[0];
-  const keep = (live>0 && zoomed && charts[0]) ? snapScales(charts[0]) : null;
-  syncing=true;
-  for(const s of slots){ await loadOne(s); }
-  const ref = keep || unionScales();
-  charts.forEach(u=>applyScales(u,ref));
-  syncing=false;
-  updateLegendValues(charts[0], null);
+  if(loading) return;                       // Überlappung verhindern (kein syncing-Race)
+  loading=true;
+  try{
+    const slots = dual?[0,1]:[0];
+    const results = await Promise.all(slots.map(s=>fetchOne(s)));   // parallel laden
+    // ab hier alles SYNCHRON – kein await mehr
+    results.forEach(applyOne);
+    if(zoomed){
+      // Nutzer-Zoom beibehalten
+    } else if(live>0){
+      applyLiveScales();
+    } else {
+      fitAll();
+    }
+    updateLegendValues(charts[0], null);
+  } finally { loading=false; }
 }
 
 function setMode(m){
@@ -400,19 +436,28 @@ function setDual(on){
     // B automatisch auf das nächste ANDERE Pack setzen (nicht dasselbe wie A)
     const other=PACKS.find(p=>p!==sources[0]);
     if(other){ sources[1]=other; selB.value=other; }
-    if(preDualHA==null) preDualHA=document.getElementById("wrapA").clientHeight;
     if(!charts[1]){ charts[1]=makeChart("chartB","wrapB"); buildLegendSyncFromA(charts[1]); }
     document.getElementById("titleA").textContent = sources[0];
     document.getElementById("titleB").textContent = sources[1];
     loadData();
     applyDualHeights();
   } else {
-    // zurück zu Einzelansicht: A wieder auf vorherige Höhe
-    const wA=document.getElementById("wrapA");
-    wA.style.height=((preDualHA||470))+"px"; preDualHA=null;
-    if(charts[0]) charts[0].setSize({width:cWidth("chartA"),height:wrapHeight("wrapA")});
+    // zurück zu Einzelansicht: A auf die volle verfügbare Fensterhöhe (nicht verkleinern)
+    applySingleHeight();
     loadData();
   }
+}
+// Einzel-Diagramm auf die verfügbare Fensterhöhe einpassen
+function applySingleHeight(){
+  if(!charts[0]) return;
+  const cardA=document.getElementById("cardA"), wrapA=document.getElementById("wrapA");
+  const legend=document.querySelector("main > .card:last-child");
+  const top=cardA.getBoundingClientRect().top, bottom=legend.getBoundingClientRect().bottom;
+  const chrome=(bottom-top)-wrapA.clientHeight;
+  const mb=parseFloat(getComputedStyle(document.querySelector("main")).marginBottom)||0;
+  const h=Math.max(260, Math.floor(window.innerHeight - top - chrome - mb - 2));
+  wrapA.style.height=h+"px";
+  charts[0].setSize({width:cWidth("chartA"),height:h});
 }
 // neu erzeugtes B-Diagramm auf aktuellen Legenden-Zustand von A bringen
 function buildLegendSyncFromA(uB){
@@ -450,6 +495,9 @@ async function init(){
   const iso=d=>new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);
   document.getElementById("to").value=iso(now);
   document.getElementById("from").value=iso(past);
+  // Klick ins Feld öffnet direkt den nativen Kalender/Uhrzeit-Picker (wo unterstützt)
+  ["from","to"].forEach(id=>{ const el=document.getElementById(id);
+    el.addEventListener("click",()=>{ if(el.showPicker){ try{ el.showPicker(); }catch(e){} } }); });
   document.querySelectorAll("#modes .seg").forEach(b=>b.onclick=()=>setMode(b.dataset.live));
   document.getElementById("load").onclick=()=>{ resetZoom(); loadData(); };
   document.getElementById("reset").onclick=resetZoom;

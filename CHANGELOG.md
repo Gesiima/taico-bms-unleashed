@@ -2,6 +2,66 @@
 
 Format: neueste Version oben. Versionierung: MAJOR.MINOR.PATCH.
 
+## [0.16.10] — 2026-07-07
+### Behoben
+- **Live: „Zoom reset" ergab eine andere Ansicht als die ursprüngliche**. Der Reset nutzte
+  `fitAll()` (volle Datenspanne + proportionaler Rand); die Live-Ansicht verwendet aber ein
+  festes gleitendes Fenster + gerundete Y-Achsen. Zoom reset stellt in Live jetzt exakt die
+  Live-Skalierung wieder her (identische Funktion für laufende Aktualisierung und Reset).
+
+## [0.16.9] — 2026-07-07
+### Behoben
+- **Dual-Live: pendelnde Skalierung („zu nah → gut") je Refresh**. uPlot wendet `setScale`
+  teils verzögert (rAF) an, wodurch der Kopplungs-Hook nach dem Zurücksetzen des bisherigen
+  Sperr-Flags feuerte und die zwei Diagramme sich gegenseitig immer wieder umskalierten.
+  Die Kopplung arbeitet jetzt **timing-unabhängig per Wertevergleich** (Spiegeln nur bei
+  echtem Unterschied) – die gegenseitige Spiegelung stoppt sofort, kein Pendeln mehr.
+
+## [0.16.8] — 2026-07-07
+### Behoben
+- **Dual-Live: springende Skalierung durch Race-Condition**. `loadData` hielt das
+  Synchronisations-Flag über den `await` (fetch) hinweg; in der Dual-Ansicht (zwei Fetches,
+  längere Laufzeit) startete der Live-Timer eine zweite Aktualisierung, während die erste
+  noch lud – dadurch wurde die Skalen-Kopplung kurzzeitig nicht unterdrückt und die beiden
+  Diagramme „kämpften" um die Achsen. Laden (async, jetzt parallel) und Anwenden (synchron)
+  sind nun getrennt, mit Überlappungsschutz – die Achsen bleiben ruhig.
+
+## [0.16.7] — 2026-07-07
+### Behoben
+- **Dual-Ansicht: springende Zeitachse in Live**. Statt der Vereinigung der Zeitbereiche
+  beider Packs (die durch leicht versetzte Poll-Zeitpunkte wanderte) wird nun ein festes,
+  gleitendes Zeitfenster verwendet (max = neuester Zeitpunkt, min = max − Live-Minuten).
+  Beide Diagramme laufen dadurch gleichmäßig und ruhig mit.
+
+## [0.16.6] — 2026-07-07
+### Geändert
+- **Live-Ansicht: ruhige Y-Achsen**. Statt proportionalem Rand werden die Werteachsen auf
+  feste Schrittweiten gerundet (Zellspannung 50 mV, Packspannung 1 V, Strom 2 A) und nur
+  erweitert. Aufeinanderfolgende Aktualisierungen ergeben denselben Achsenbereich – die
+  Skalen springen nicht mehr bei jedem Refresh, sondern nur beim Überschreiten einer Stufe.
+
+## [0.16.5] — 2026-07-07
+### Behoben
+- **Dual-Ansicht: verbleibender leerer Scrollstreifen**. In der Höhenberechnung fehlte der
+  untere Rand von `main` (~18 px); er wird jetzt real gemessen und abgezogen — kein Überstand
+  mehr (gilt auch für die Einzelansicht).
+
+## [0.16.4] — 2026-07-07
+### Geändert
+- **Zeitraum-Felder** (von/bis): Kalender-/Uhrzeit-Symbol ist jetzt sichtbar, und ein Klick
+  ins Feld öffnet direkt den nativen Kalender-/Uhrzeit-Picker zum Auswählen (Direkteingabe
+  von Zahlen bleibt weiterhin möglich).
+
+## [0.16.3] — 2026-07-07
+### Behoben
+- **Dual-Ansicht: leerer Scrollstreifen** unter der Legende. Die Höhenberechnung schätzte
+  den Overhead; jetzt wird er real gemessen (kein Überstand mehr).
+- **Live-Flackern des oberen Diagramms**: Aktualisierungen nutzen jetzt `setData(...,false)`
+  (kein Zwischen-Autoscale). Der sichtbare Zeitbereich wandert ruhig mit; die Y-Achsen
+  werden im Live-Betrieb nur noch **erweitert, wenn nötig** (kein Springen).
+- **Wechsel Dual → Einzel** verkleinerte das Diagramm. Die Einzelansicht füllt jetzt die
+  verfügbare Fensterhöhe (statt kleiner zu werden).
+
 ## [0.16.2] — 2026-07-07
 ### Behoben
 - **Dual-Ansicht: abgeschnittene Werte**. Die gekoppelten Achsen nutzten nur den
