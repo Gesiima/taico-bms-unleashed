@@ -2,6 +2,21 @@
 
 Format: neueste Version oben. Versionierung: MAJOR.MINOR.PATCH.
 
+## [0.16.2] — 2026-07-07
+### Behoben
+- **Dual-Ansicht: abgeschnittene Werte**. Die gekoppelten Achsen nutzten nur den
+  Wertebereich von Diagramm A; hatte Pack B größere Werte, wurden diese abgeschnitten.
+  Jetzt spannen die gekoppelten Achsen die **Vereinigung beider Diagramme** auf – es passt
+  immer alles hinein.
+
+## [0.16.1] — 2026-07-07
+### Geändert
+- **Dual-Ansicht**: beide Diagramme passen sich jetzt 50/50 an die Fensterhöhe an
+  (mit Mindesthöhe), reagieren auf Fenstergröße; „Höhe ziehen" bleibt zusätzlich möglich.
+- Beim Einschalten der Dual-Ansicht wird für das zweite Diagramm automatisch das
+  **nächste andere Pack** gewählt (nicht dasselbe wie oben).
+- Diagramm-Titel zeigen nur noch den **Pack-Namen** (ohne „Pack A/B"-Präfix).
+
 ## [0.16.0] — 2026-07-07
 ### Hinzugefügt
 - **Dual-Ansicht im Verlauf**: per Schalter „Dual-Ansicht" wird ein zweites Diagramm

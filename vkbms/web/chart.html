@@ -139,6 +139,8 @@ const COLORS=SERIES_META.map(m=>m.stroke), LABELS=SERIES_META.map(m=>m.label), D
 const UNIT={mv:"mV",v:"V",a:"A",soc:"%"};
 
 let charts=[];                 // uPlot-Instanzen: [0]=A (oben), [1]=B (unten)
+let PACKS=[];                  // verfügbare Quellen
+let preDualHA=null;            // Einzel-Höhe von A vor dem Umschalten auf Dual
 let sources=["",""];           // ausgewählte Quelle je Slot
 let dual=false, live=0, timer=null, zoomed=false, syncing=false;
 const SYNC = (typeof uPlot.sync==="function") ? uPlot.sync("vkbms") : null;
@@ -171,6 +173,16 @@ function propagateScale(u, key){
 }
 function snapScales(u){ const g=k=>[u.scales[k].min,u.scales[k].max];
   return {x:g("x"),mv:g("mv"),v:g("v"),a:g("a")}; }
+// Vereinigung der Wertebereiche ALLER Diagramme, damit in der Dual-Ansicht nichts
+// abgeschnitten wird (beide Packs passen in die gekoppelten Achsen)
+function unionScales(){
+  const r={};
+  ["x","mv","v","a"].forEach(k=>{ let mn=Infinity, mx=-Infinity;
+    charts.forEach(u=>{ const s=u.scales[k]; if(s&&s.min!=null&&s.max!=null){ mn=Math.min(mn,s.min); mx=Math.max(mx,s.max); } });
+    r[k]=(mn===Infinity)?[null,null]:[mn,mx];
+  });
+  return r;
+}
 function applyScales(u,r){ u.setScale("x",{min:r.x[0],max:r.x[1]}); u.setScale("mv",{min:r.mv[0],max:r.mv[1]});
   u.setScale("v",{min:r.v[0],max:r.v[1]}); u.setScale("a",{min:r.a[0],max:r.a[1]}); }
 
@@ -260,9 +272,24 @@ function makeChart(divId, wrapId, dragId){
 }
 
 let rt=null;
-window.addEventListener("resize",()=>{ clearTimeout(rt); rt=setTimeout(()=>charts.forEach((u,i)=>{
-  const ids=i===0?["chartA","wrapA"]:["chartB","wrapB"]; u.setSize({width:cWidth(ids[0]),height:wrapHeight(ids[1])});
-}),150); });
+window.addEventListener("resize",()=>{ clearTimeout(rt); rt=setTimeout(()=>{
+  if(dual){ applyDualHeights(); return; }
+  charts.forEach((u,i)=>{
+    const ids=i===0?["chartA","wrapA"]:["chartB","wrapB"]; u.setSize({width:cWidth(ids[0]),height:wrapHeight(ids[1])});
+  });
+},150); });
+// Dual-Ansicht: beide Diagramme 50/50 ins sichtbare Fenster einpassen
+function applyDualHeights(){
+  if(!dual || !charts[1]) return;
+  const cardA=document.getElementById("cardA");
+  const top=cardA.getBoundingClientRect().top;                 // ab hier beginnen die Diagramme
+  const legend=document.querySelector("main > .card:last-child");
+  const legendH=legend?legend.getBoundingClientRect().height:0;
+  const overhead = 2*(16*2 + 28 + 22) + 14 + 14 + 18;          // je Card: Padding+Ziehleiste+Titel; + Abstände
+  const each=Math.max(200, Math.floor((window.innerHeight - top - legendH - overhead)/2));
+  ["wrapA","wrapB"].forEach(w=>{ document.getElementById(w).style.height=each+"px"; });
+  charts.forEach((u,i)=>{ const d=i===0?"chartA":"chartB"; u.setSize({width:cWidth(d),height:each}); });
+}
 
 // ---- gemeinsame Legende (steuert beide Diagramme) ----
 function buildLegend(){
@@ -321,7 +348,7 @@ function resetZoom(){
   if(!charts[0]) return;
   syncing=true;
   charts.forEach(u=>{ ["x","mv","v","a"].forEach(s=>u.setScale(s,{min:null,max:null})); u.setScale("soc",{min:0,max:100}); });
-  const ref=snapScales(charts[0]); charts.forEach(u=>applyScales(u,ref));
+  const ref=unionScales(); charts.forEach(u=>applyScales(u,ref));
   syncing=false;
 }
 
@@ -345,7 +372,7 @@ async function loadData(){
   const keep = (live>0 && zoomed && charts[0]) ? snapScales(charts[0]) : null;
   syncing=true;
   for(const s of slots){ await loadOne(s); }
-  const ref = keep || snapScales(charts[0]);
+  const ref = keep || unionScales();
   charts.forEach(u=>applyScales(u,ref));
   syncing=false;
   updateLegendValues(charts[0], null);
@@ -368,10 +395,24 @@ function setDual(on){
   document.getElementById("bmsB").style.display    = on?"":"none";
   document.getElementById("bmsBlab").style.display = on?"inline":"none";
   document.getElementById("titleA").style.display  = on?"":"none";
-  if(on && !charts[1]){ charts[1]=makeChart("chartB","wrapB"); buildLegendSyncFromA(charts[1]); }
-  document.getElementById("titleA").textContent = "Pack A · "+sources[0];
-  document.getElementById("titleB").textContent = "Pack B · "+sources[1];
-  loadData();
+  const selB=document.getElementById("bmsB");
+  if(on){
+    // B automatisch auf das nächste ANDERE Pack setzen (nicht dasselbe wie A)
+    const other=PACKS.find(p=>p!==sources[0]);
+    if(other){ sources[1]=other; selB.value=other; }
+    if(preDualHA==null) preDualHA=document.getElementById("wrapA").clientHeight;
+    if(!charts[1]){ charts[1]=makeChart("chartB","wrapB"); buildLegendSyncFromA(charts[1]); }
+    document.getElementById("titleA").textContent = sources[0];
+    document.getElementById("titleB").textContent = sources[1];
+    loadData();
+    applyDualHeights();
+  } else {
+    // zurück zu Einzelansicht: A wieder auf vorherige Höhe
+    const wA=document.getElementById("wrapA");
+    wA.style.height=((preDualHA||470))+"px"; preDualHA=null;
+    if(charts[0]) charts[0].setSize({width:cWidth("chartA"),height:wrapHeight("wrapA")});
+    loadData();
+  }
 }
 // neu erzeugtes B-Diagramm auf aktuellen Legenden-Zustand von A bringen
 function buildLegendSyncFromA(uB){
@@ -397,13 +438,14 @@ async function init(){
     const s=await (await fetch("/api/state")).json();
     packs=(s.packs||[]).map(p=>p.source);
   }catch(e){}
+  PACKS=packs;
   const selA=document.getElementById("bms"), selB=document.getElementById("bmsB");
   packs.forEach(p=>{ [selA,selB].forEach(sel=>{ const o=document.createElement("option"); o.value=p; o.textContent=p; sel.appendChild(o); }); });
   sources[0]=packs[0]||"";
   sources[1]=packs[1]||packs[0]||"";
   selA.value=sources[0]; selB.value=sources[1];
-  selA.onchange=()=>{ sources[0]=selA.value; document.getElementById("titleA").textContent="Pack A · "+sources[0]; resetZoom(); loadData(); };
-  selB.onchange=()=>{ sources[1]=selB.value; document.getElementById("titleB").textContent="Pack B · "+sources[1]; resetZoom(); loadData(); };
+  selA.onchange=()=>{ sources[0]=selA.value; document.getElementById("titleA").textContent=sources[0]; resetZoom(); loadData(); };
+  selB.onchange=()=>{ sources[1]=selB.value; document.getElementById("titleB").textContent=sources[1]; resetZoom(); loadData(); };
   const now=new Date(), past=new Date(Date.now()-24*3600e3);
   const iso=d=>new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);
   document.getElementById("to").value=iso(now);
