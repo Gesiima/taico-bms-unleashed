@@ -34,16 +34,20 @@ zurückentwickelt; Details in `VKING_BMS_Protokoll_Spezifikation.md`.
   rechte Achse (unabhängige Skalen, Werte mit Einheit) sowie **SOC** (feste Skala 0–100,
   ohne sichtbare Achse).
 - **Verlauf** (frei wählbarer Zeitraum) oder **Live** (5/10/30/60 min, 2 h, 6 h).
-- Zoom per Ziehen mit sichtbarem Auswahlbereich + Zeitspanne; im Live-Modus bleibt der
-  Zoom erhalten. **Diagrammhöhe ziehbar** (Rand unten), Höhe pro Sitzung gemerkt.
+- **Bedienung:** Ziehen = Kasten-Zoom (mit sichtbarem Auswahlbereich) · **Mausrad = Zeit
+  zoomen** (im Live-Modus ändert es die **Zeitspanne** und bleibt am „Jetzt" verankert, läuft
+  also weiter live) · **Shift+Mausrad = Werteachsen zoomen** (in Live ohne das Zeit-Nachführen
+  anzuhalten) · **Shift+Ziehen = verschieben** · Doppelklick bzw. „Zoom reset" = Vollansicht
+  bzw. zurück zur Live-Ansicht. **Diagrammhöhe ziehbar** (Rand unten), Höhe pro Sitzung gemerkt.
+- Zeitraum (von/bis) per direkter Eingabe oder Klick über den nativen Kalender-/Uhrzeit-Picker.
 - Kompakte Legende mit Ein-/Ausblenden je Serie (gefülltes Kästchen = aktiv), Werten,
   die dem Cursor folgen (inkl. Cursor-Zeit), und **Hover-Highlight** (überfahrene Linie
   hervorgehoben, Rest gedimmt). **„Alle aus/an"**-Schalter zum schnellen Filtern vieler
-  Linien und ein **Cursor-Tooltip** (Name + Wert der nächstliegenden Linie am Mauszeiger). Aktives
-  Zell-Balancing wird als Punkte auf der jeweiligen Zell-Linie markiert. Zoom per Ziehen oder Mausrad (X);
-  Shift+Mausrad zoomt Y, Shift+Ziehen verschiebt; Vollansicht per Doppelklick. Über **Dual-Ansicht** lassen sich zwei Packs
-  gleichzeitig in zwei untereinander liegenden, in Zeit **und** Werten gekoppelten
-  Diagrammen mit gemeinsamer Legende betrachten.
+  Linien und ein **Cursor-Tooltip** (Name + Wert der nächstliegenden Linie am Mauszeiger).
+  Aktives Zell-Balancing wird als Punkte auf der jeweiligen Zell-Linie markiert.
+- **Dual-Ansicht** (Schalter): zwei Packs gleichzeitig in zwei untereinander liegenden
+  Diagrammen, in **Zeit und Werten gekoppelt** (Zoom/Pan/Mausrad/Cursor wirken auf beide),
+  mit **gemeinsamer Legende**. Beide Diagramme füllen zusammen 50/50 die Fensterhöhe.
 - Kontrastreiche 16-Farben-Palette für die Zellen; Diagrammbreite folgt dem Browserfenster.
 - Verlustfreies Downsampling für große Zeiträume; SQLite-Index für schnelle Abfragen.
 
