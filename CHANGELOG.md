@@ -2,6 +2,18 @@
 
 Format: neueste Version oben. Versionierung: MAJOR.MINOR.PATCH.
 
+## [0.16.11] — 2026-07-07
+### Geändert
+- **Live-Mausrad = Zeitspanne (Option C)**: In Live ändert das Mausrad jetzt die sichtbare
+  Zeitspanne (rein/raus), bleibt aber am rechten Rand („jetzt") verankert und **läuft weiter
+  live** – kein Einfrieren mehr. Shift+Mausrad setzt einen Y-Detailbereich, ebenfalls ohne
+  das Zeit-Nachführen anzuhalten. „Zoom reset" bringt die Standard-Live-Ansicht zurück.
+  (Im Verlaufsmodus bleibt das Mausrad ein freier Zoom.)
+### Behoben
+- **Flackern bei Shift+Ziehen (Pan)**: Achsen werden jetzt pro Diagramm in einem einzigen
+  Redraw gesetzt (uPlot `batch`) und die Kopplung während des Setzens kurz ausgesetzt –
+  ruhiges Verschieben ohne Flackern, auch in der Dual-Ansicht.
+
 ## [0.16.10] — 2026-07-07
 ### Behoben
 - **Live: „Zoom reset" ergab eine andere Ansicht als die ursprüngliche**. Der Reset nutzte

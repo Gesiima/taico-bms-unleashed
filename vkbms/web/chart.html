@@ -120,7 +120,7 @@
       <span class="hint">Tipp: „Alle aus" und dann einzelne Linien einblenden · gilt für beide Diagramme</span></div>
     <div id="legtime"></div>
     <div id="legend" class="legend"></div>
-    <div class="hint">Ziehen = zoomen · Mausrad = X-Zoom · Shift+Mausrad = Y-Zoom · Shift+Ziehen = verschieben · Doppelklick oder „Zoom reset" = Vollansicht · In der Dual-Ansicht sind beide Diagramme in Zeit und Werten gekoppelt.</div>
+    <div class="hint">Ziehen = zoomen · Mausrad = Zeit zoomen (in Live: Zeitspanne, läuft weiter) · Shift+Mausrad = Werte-Zoom · Shift+Ziehen = verschieben · Doppelklick oder „Zoom reset" = Vollansicht · In der Dual-Ansicht sind beide Diagramme in Zeit und Werten gekoppelt.</div>
   </div>
 </main>
 <script src="/vendor/uPlot.iife.min.js"></script>
@@ -145,6 +145,9 @@ let PACKS=[];                  // verfügbare Quellen
 let sources=["",""];           // ausgewählte Quelle je Slot
 let dual=false, live=0, timer=null, zoomed=false;
 let liveY={};                  // im Live-Betrieb nur wachsende Y-Bereiche (kein Springen)
+let liveSpanOverride=null;     // Live: per Mausrad geänderte Zeitspanne (Sekunden)
+let manualY={};                // Live: per Shift+Mausrad gesetzter Y-Bereich (überschreibt Snap)
+let selfDriving=false;         // true, während ich alle Diagramme selbst setze (kein Auto-Mirror)
 const SYNC = (typeof uPlot.sync==="function") ? uPlot.sync("vkbms") : null;
 
 // Balancing-Punkte je Diagramm (u._bal = ODER-Maske je x-Index)
@@ -169,6 +172,7 @@ function wrapHeight(wrapId){ const w=document.getElementById(wrapId); return Mat
 // Gespiegelt wird nur bei Wertunterschied; dadurch stoppt die gegenseitige Spiegelung
 // sofort (kein Pendeln), unabhängig davon wann uPlot den setScale-Hook feuert.
 function propagateScale(u, key){
+  if(selfDriving) return;
   const s=u.scales[key]; if(!s) return;
   charts.forEach(o=>{ if(o!==u){ const os=o.scales[key];
     if(os && (os.min!==s.min || os.max!==s.max)) o.setScale(key,{min:s.min,max:s.max}); } });
@@ -235,24 +239,47 @@ function makeChart(divId, wrapId, dragId){
     zoomed=true;
     const move=ev=>{
       const dxu=(ev.clientX-x0)/rect.width*xspan;
-      u.setScale("x",{min:xmin-dxu,max:xmax-dxu});
       const fy=ev.clientY-y0;
       const sh=o=>({min:o.min+fy/rect.height*o.span, max:o.max+fy/rect.height*o.span});
-      u.setScale("mv",sh(yA)); u.setScale("v",sh(yV)); u.setScale("a",sh(yC));
+      const xr={min:xmin-dxu,max:xmax-dxu}, mvr=sh(yA), vr=sh(yV), ar=sh(yC);
+      // beide Diagramme in EINEM Redraw je Chart setzen -> kein Flackern
+      selfDriving=true;
+      charts.forEach(c=>c.batch(()=>{ c.setScale("x",xr); c.setScale("mv",mvr); c.setScale("v",vr); c.setScale("a",ar); }));
+      selfDriving=false;
     };
     const up=()=>{ document.removeEventListener("mousemove",move); document.removeEventListener("mouseup",up); };
     document.addEventListener("mousemove",move); document.addEventListener("mouseup",up);
   }, true);
-  // Mausrad = X zoomen, Shift+Mausrad = Y (mV/V/A), cursor-zentriert
+  // Mausrad-Verhalten: in Live = Zeitspanne ändern (bleibt live), sonst freier Zoom
   over.addEventListener("wheel", e=>{
     e.preventDefault();
     const rect=over.getBoundingClientRect();
-    const f = e.deltaY<0 ? 0.85 : 1/0.85;
-    const zoomScale=(sc,px)=>{ const s=u.scales[sc]; if(s.min==null||s.max==null) return;
-      const v=u.posToVal(px,sc); u.setScale(sc,{min:v-(v-s.min)*f, max:v+(s.max-v)*f}); };
+    const f = e.deltaY<0 ? 0.85 : 1/0.85;      // hoch = rein/enger, runter = raus/weiter
+    if(live>0 && !zoomed){
+      if(e.shiftKey){
+        // Y-Detail in Live: Y-Bereich um Cursor setzen, Zeit läuft weiter (kein Einfrieren)
+        const py=e.clientY-rect.top;
+        ["mv","v","a"].forEach(sc=>{ const s=u.scales[sc]; if(s.min==null||s.max==null) return;
+          const v=u.posToVal(py,sc); manualY[sc]=[v-(v-s.min)*f, v+(s.max-v)*f]; });
+      } else {
+        // Zeitspanne ändern, am rechten Rand („jetzt") verankert -> läuft weiter live
+        const span=liveSpanOverride||live*60;
+        liveSpanOverride=Math.max(10, Math.min(live*60, span*f));
+      }
+      applyLiveScales();
+      return;
+    }
+    // Verlauf: freier Zoom um den Cursor (friert die Ansicht ein), in EINEM Redraw
+    const zoomScale=(c,sc,px)=>{ const s=c.scales[sc]; if(s.min==null||s.max==null) return;
+      const v=c.posToVal(px,sc); c.setScale(sc,{min:v-(v-s.min)*f, max:v+(s.max-v)*f}); };
     zoomed=true;
-    if(e.shiftKey){ const py=e.clientY-rect.top; ["mv","v","a"].forEach(s=>zoomScale(s,py)); }
-    else { zoomScale("x", e.clientX-rect.left); }
+    const px=e.clientX-rect.left, py=e.clientY-rect.top;
+    selfDriving=true;
+    charts.forEach(c=>c.batch(()=>{
+      if(e.shiftKey){ ["mv","v","a"].forEach(sc=>zoomScale(c,sc,py)); }
+      else { zoomScale(c,"x",px); }
+    }));
+    selfDriving=false;
   }, {passive:false});
   // ziehbare Höhe
   const wrap=document.getElementById(wrapId);
@@ -359,16 +386,26 @@ function fitAll(){                        // volle Vereinigung (Verlauf / Reset)
 function applyLiveScales(){
   const u=unionRanges();
   const xmax=u.x[1];
-  const xmin=(xmax!=null)? xmax - live*60 : u.x[0];
-  charts.forEach(c=>c.setScale("x",{min:xmin,max:xmax}));
-  ["mv","v","a"].forEach(k=>{ const t=snapY(u[k], YSTEP[k]); if(t[0]==null) return;
+  const span=liveSpanOverride||live*60;                 // per Mausrad geänderte Zeitspanne
+  const xmin=(xmax!=null)? xmax - span : u.x[0];
+  const yR={};
+  ["mv","v","a"].forEach(k=>{
+    if(manualY[k]){ yR[k]=manualY[k]; return; }          // manueller Y-Zoom hat Vorrang
+    const t=snapY(u[k], YSTEP[k]); if(t[0]==null) return;
     let mn=t[0], mx=t[1];
     if(liveY[k]){ mn=Math.min(liveY[k][0],mn); mx=Math.max(liveY[k][1],mx); }
-    liveY[k]=[mn,mx]; charts.forEach(c=>c.setScale(k,{min:mn,max:mx}));
+    liveY[k]=[mn,mx]; yR[k]=[mn,mx];
   });
+  selfDriving=true;
+  charts.forEach(c=>c.batch(()=>{
+    c.setScale("x",{min:xmin,max:xmax});
+    Object.keys(yR).forEach(k=>c.setScale(k,{min:yR[k][0],max:yR[k][1]}));
+  }));
+  selfDriving=false;
 }
 function resetZoom(){
-  zoomed=false; liveY={}; const el=document.getElementById("sel"); if(el) el.textContent="";
+  zoomed=false; liveY={}; liveSpanOverride=null; manualY={};
+  const el=document.getElementById("sel"); if(el) el.textContent="";
   if(!charts[0]) return;
   if(live>0) applyLiveScales();   // Live: exakt die Live-Ansicht wiederherstellen (nicht fitAll)
   else fitAll();
