@@ -2,6 +2,13 @@
 
 Format: neueste Version oben. Versionierung: MAJOR.MINOR.PATCH.
 
+## [0.16.12] — 2026-07-07
+### Behoben
+- **Grünes Pixel oben links im Diagramm**. Die Auswahl-Box (`.u-select`) hatte einen 1px
+  grünen Rahmen; da uPlot dieses Element dauerhaft (im Ruhezustand 0×0, Position oben links)
+  im DOM hält, war der Rahmen als einzelnes grünes Pixel sichtbar. Rahmen entfernt, die
+  sichtbare Zoom-Auswahl wird jetzt über einen Inset-Schatten dargestellt (bei 0×0 unsichtbar).
+
 ## [0.16.11] — 2026-07-07
 ### Geändert
 - **Live-Mausrad = Zeitspanne (Option C)**: In Live ändert das Mausrad jetzt die sichtbare
