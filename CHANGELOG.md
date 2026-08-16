@@ -2,21 +2,21 @@
 
 Format: neueste Version oben. Versionierung: MAJOR.MINOR.PATCH.
 
-## [0.16.13] — 2026-07-07
+## [0.16.13] — 2026-08-16
 ### Behoben
 - **Zellalarm: rote mV-Schrift auf rotem Balken unlesbar**. Überschreitet eine Zelle die
   Alarmschwelle (z. B. 3600 mV), wird der Zellbalken rot – die mV-Zahl war ebenfalls rot und
   bei hohem (fast vollem) Balken nicht mehr lesbar. Die mV-Zahl ist im Alarmzustand jetzt
   weiß mit Schatten; roter Balken + roter Rahmen signalisieren den Alarm weiterhin.
 
-## [0.16.12] — 2026-07-07
+## [0.16.12] — 2026-07-28
 ### Behoben
 - **Grünes Pixel oben links im Diagramm**. Die Auswahl-Box (`.u-select`) hatte einen 1px
   grünen Rahmen; da uPlot dieses Element dauerhaft (im Ruhezustand 0×0, Position oben links)
   im DOM hält, war der Rahmen als einzelnes grünes Pixel sichtbar. Rahmen entfernt, die
   sichtbare Zoom-Auswahl wird jetzt über einen Inset-Schatten dargestellt (bei 0×0 unsichtbar).
 
-## [0.16.11] — 2026-07-07
+## [0.16.11] — 2026-07-28
 ### Geändert
 - **Live-Mausrad = Zeitspanne (Option C)**: In Live ändert das Mausrad jetzt die sichtbare
   Zeitspanne (rein/raus), bleibt aber am rechten Rand („jetzt") verankert und **läuft weiter
@@ -28,14 +28,14 @@ Format: neueste Version oben. Versionierung: MAJOR.MINOR.PATCH.
   Redraw gesetzt (uPlot `batch`) und die Kopplung während des Setzens kurz ausgesetzt –
   ruhiges Verschieben ohne Flackern, auch in der Dual-Ansicht.
 
-## [0.16.10] — 2026-07-07
+## [0.16.10] — 2026-07-28
 ### Behoben
 - **Live: „Zoom reset" ergab eine andere Ansicht als die ursprüngliche**. Der Reset nutzte
   `fitAll()` (volle Datenspanne + proportionaler Rand); die Live-Ansicht verwendet aber ein
   festes gleitendes Fenster + gerundete Y-Achsen. Zoom reset stellt in Live jetzt exakt die
   Live-Skalierung wieder her (identische Funktion für laufende Aktualisierung und Reset).
 
-## [0.16.9] — 2026-07-07
+## [0.16.9] — 2026-07-28
 ### Behoben
 - **Dual-Live: pendelnde Skalierung („zu nah → gut") je Refresh**. uPlot wendet `setScale`
   teils verzögert (rAF) an, wodurch der Kopplungs-Hook nach dem Zurücksetzen des bisherigen
@@ -43,7 +43,7 @@ Format: neueste Version oben. Versionierung: MAJOR.MINOR.PATCH.
   Die Kopplung arbeitet jetzt **timing-unabhängig per Wertevergleich** (Spiegeln nur bei
   echtem Unterschied) – die gegenseitige Spiegelung stoppt sofort, kein Pendeln mehr.
 
-## [0.16.8] — 2026-07-07
+## [0.16.8] — 2026-07-28
 ### Behoben
 - **Dual-Live: springende Skalierung durch Race-Condition**. `loadData` hielt das
   Synchronisations-Flag über den `await` (fetch) hinweg; in der Dual-Ansicht (zwei Fetches,
@@ -52,33 +52,33 @@ Format: neueste Version oben. Versionierung: MAJOR.MINOR.PATCH.
   Diagramme „kämpften" um die Achsen. Laden (async, jetzt parallel) und Anwenden (synchron)
   sind nun getrennt, mit Überlappungsschutz – die Achsen bleiben ruhig.
 
-## [0.16.7] — 2026-07-07
+## [0.16.7] — 2026-07-28
 ### Behoben
 - **Dual-Ansicht: springende Zeitachse in Live**. Statt der Vereinigung der Zeitbereiche
   beider Packs (die durch leicht versetzte Poll-Zeitpunkte wanderte) wird nun ein festes,
   gleitendes Zeitfenster verwendet (max = neuester Zeitpunkt, min = max − Live-Minuten).
   Beide Diagramme laufen dadurch gleichmäßig und ruhig mit.
 
-## [0.16.6] — 2026-07-07
+## [0.16.6] — 2026-07-28
 ### Geändert
 - **Live-Ansicht: ruhige Y-Achsen**. Statt proportionalem Rand werden die Werteachsen auf
   feste Schrittweiten gerundet (Zellspannung 50 mV, Packspannung 1 V, Strom 2 A) und nur
   erweitert. Aufeinanderfolgende Aktualisierungen ergeben denselben Achsenbereich – die
   Skalen springen nicht mehr bei jedem Refresh, sondern nur beim Überschreiten einer Stufe.
 
-## [0.16.5] — 2026-07-07
+## [0.16.5] — 2026-07-28
 ### Behoben
 - **Dual-Ansicht: verbleibender leerer Scrollstreifen**. In der Höhenberechnung fehlte der
   untere Rand von `main` (~18 px); er wird jetzt real gemessen und abgezogen — kein Überstand
   mehr (gilt auch für die Einzelansicht).
 
-## [0.16.4] — 2026-07-07
+## [0.16.4] — 2026-07-28
 ### Geändert
 - **Zeitraum-Felder** (von/bis): Kalender-/Uhrzeit-Symbol ist jetzt sichtbar, und ein Klick
   ins Feld öffnet direkt den nativen Kalender-/Uhrzeit-Picker zum Auswählen (Direkteingabe
   von Zahlen bleibt weiterhin möglich).
 
-## [0.16.3] — 2026-07-07
+## [0.16.3] — 2026-07-28
 ### Behoben
 - **Dual-Ansicht: leerer Scrollstreifen** unter der Legende. Die Höhenberechnung schätzte
   den Overhead; jetzt wird er real gemessen (kein Überstand mehr).
@@ -88,14 +88,14 @@ Format: neueste Version oben. Versionierung: MAJOR.MINOR.PATCH.
 - **Wechsel Dual → Einzel** verkleinerte das Diagramm. Die Einzelansicht füllt jetzt die
   verfügbare Fensterhöhe (statt kleiner zu werden).
 
-## [0.16.2] — 2026-07-07
+## [0.16.2] — 2026-07-28
 ### Behoben
 - **Dual-Ansicht: abgeschnittene Werte**. Die gekoppelten Achsen nutzten nur den
   Wertebereich von Diagramm A; hatte Pack B größere Werte, wurden diese abgeschnitten.
   Jetzt spannen die gekoppelten Achsen die **Vereinigung beider Diagramme** auf – es passt
   immer alles hinein.
 
-## [0.16.1] — 2026-07-07
+## [0.16.1] — 2026-07-28
 ### Geändert
 - **Dual-Ansicht**: beide Diagramme passen sich jetzt 50/50 an die Fensterhöhe an
   (mit Mindesthöhe), reagieren auf Fenstergröße; „Höhe ziehen" bleibt zusätzlich möglich.
@@ -103,7 +103,7 @@ Format: neueste Version oben. Versionierung: MAJOR.MINOR.PATCH.
   **nächste andere Pack** gewählt (nicht dasselbe wie oben).
 - Diagramm-Titel zeigen nur noch den **Pack-Namen** (ohne „Pack A/B"-Präfix).
 
-## [0.16.0] — 2026-07-07
+## [0.16.0] — 2026-07-28
 ### Hinzugefügt
 - **Dual-Ansicht im Verlauf**: per Schalter „Dual-Ansicht" wird ein zweites Diagramm
   unter dem ersten eingeblendet, mit eigener Pack-Auswahl (BMS B). Beide Diagramme sind in
