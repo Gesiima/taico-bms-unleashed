@@ -2,6 +2,13 @@
 
 Format: neueste Version oben. Versionierung: MAJOR.MINOR.PATCH.
 
+## [0.16.13] — 2026-07-07
+### Behoben
+- **Zellalarm: rote mV-Schrift auf rotem Balken unlesbar**. Überschreitet eine Zelle die
+  Alarmschwelle (z. B. 3600 mV), wird der Zellbalken rot – die mV-Zahl war ebenfalls rot und
+  bei hohem (fast vollem) Balken nicht mehr lesbar. Die mV-Zahl ist im Alarmzustand jetzt
+  weiß mit Schatten; roter Balken + roter Rahmen signalisieren den Alarm weiterhin.
+
 ## [0.16.12] — 2026-07-07
 ### Behoben
 - **Grünes Pixel oben links im Diagramm**. Die Auswahl-Box (`.u-select`) hatte einen 1px
